@@ -39,7 +39,15 @@ WORKDIR /home/ubuntu
 RUN curl -fsSL -v -o miniconda.sh -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh  && \
     bash miniconda.sh -b -p ./miniconda3 && \
     rm miniconda.sh && \
-    echo "source ~/miniconda3/bin/activate" >> ./.bashrc
+    echo "source ~/miniconda3/bin/activate" >> ./.bashrc && \
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+    sudo dpkg -i cuda-keyring_1.1-1_all.deb && \
+    sudo apt-get update && \
+    sudo apt-get -y install cuda-toolkit-12-4 && \
+    sudo apt-get -y install cudnn && \
+    export CUDACXX=/usr/local/cuda/bin/nvcc && \
+    export CUDA_HOME=/usr/local/cuda && \
+    export PATH=$PATH:$CUDA_HOME/bin
 
 # --build-arg COMPILE=ON to compile from source
 FROM base AS dev

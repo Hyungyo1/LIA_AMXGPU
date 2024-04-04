@@ -82,6 +82,9 @@ if [ $((${MODE} & 0x02)) -ne 0 ]; then
 
     # Install deps
     conda install -y cmake ninja
+    conda install -y intel::mkl-static intel::mkl-include
+    conda install -y -c pytorch magma-cuda121
+    # pip install -r requirements.txt
 
     echo "#!/bin/bash" > ${AUX_INSTALL_SCRIPT}
     if [ $((${MODE} & 0x04)) -ne 0 ]; then
@@ -94,9 +97,9 @@ if [ $((${MODE} & 0x02)) -ne 0 ]; then
             echo "Error: Detected dependent PyTorch is a nightly built version. Installation from prebuilt wheel files is not supported. Run again to compile from source."
             exit 4
         else
-            echo "python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/cpu" >> ${AUX_INSTALL_SCRIPT}
+            echo "python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl" >> ${AUX_INSTALL_SCRIPT}
             echo "python -m pip install intel-extension-for-pytorch==${VER_IPEX} oneccl-bind-pt==${VER_TORCHCCL} --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/" >> ${AUX_INSTALL_SCRIPT}
-            python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/cpu
+            python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/
             python -m pip install intel-extension-for-pytorch==${VER_IPEX} oneccl-bind-pt==${VER_TORCHCCL} --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
         fi
     else
@@ -148,7 +151,7 @@ if [ $((${MODE} & 0x02)) -ne 0 ]; then
         if [ ${TORCH_DEV} -eq 0 ]; then
             URL_NIGHTLY="nightly/"
         fi
-        echo "python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}cpu" >> ${AUX_INSTALL_SCRIPT}
+        echo "python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}" >> ${AUX_INSTALL_SCRIPT}
         # Install PyTorch and Intel® Extension for PyTorch*
         cp intel-extension-for-pytorch/scripts/compile_bundle.sh .
         sed -i "s/VER_IPEX=.*/VER_IPEX=/" compile_bundle.sh

@@ -143,12 +143,12 @@ URL_NIGHTLY=""
 if [ ${TORCH_DEV} -eq 0 ]; then
     URL_NIGHTLY="nightly/"
 fi
-python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}cpu
+python -m pip install torch==${VER_TORCH} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}
 if [ $((${MODE} & 0x04)) -ne 0 ]; then
-    python -m pip install torchvision==${VER_TORCHVISION} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}cpu
+    python -m pip install torchvision==${VER_TORCHVISION} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}
 fi
 if [ $((${MODE} & 0x02)) -ne 0 ]; then
-    python -m pip install torchaudio==${VER_TORCHAUDIO} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}cpu
+    python -m pip install torchaudio==${VER_TORCHAUDIO} --index-url https://download.pytorch.org/whl/${URL_NIGHTLY}
 fi
 if [ $((${MODE} & 0x01)) -ne 0 ]; then
     if [ ! -d torch-ccl ]; then

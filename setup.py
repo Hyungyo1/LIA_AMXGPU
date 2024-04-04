@@ -705,6 +705,8 @@ class IPEXCPPLibBuild(build_clib, object):
             "IPEX_PROJ_NAME": PACKAGE_NAME,
             "LIBIPEX_GITREV": ipex_git_sha,
             "LIBIPEX_VERSION": ipex_build_version,
+            "CMAKE_CUDA_ARCHITECTURES": "native",
+            "CMAKE_CUDA_COMPILER": "/usr/local/cuda/bin/nvcc",
         }
 
         build_with_cpu = True  # Default ON
