@@ -235,6 +235,7 @@ export LLVM_DIR=${LLVM_ROOT}/lib/cmake/llvm
 export DNNL_GRAPH_BUILD_COMPILER_BACKEND=1
 CXXFLAGS_BK=${CXXFLAGS}
 export CXXFLAGS="${CXXFLAGS} -D__STDC_FORMAT_MACROS"
+export TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0"
 python setup.py clean
 python setup.py bdist_wheel 2>&1 | tee build.log
 export CXXFLAGS=${CXXFLAGS_BK}
