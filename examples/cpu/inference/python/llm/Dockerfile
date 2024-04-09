@@ -59,18 +59,18 @@ RUN . ./miniconda3/bin/activate && \
     cd intel-extension-for-pytorch/examples/cpu/inference/python/llm && \
     if [ -z ${COMPILE} ]; then bash tools/env_setup.sh 6; else bash tools/env_setup.sh 2; fi
 
-# FROM base AS deploy
-# COPY --from=dev --chown=ubuntu:ubuntu /home/ubuntu/intel-extension-for-pytorch/examples/cpu/inference/python/llm ./llm
-# RUN rm ./llm/tools/get_libstdcpp_lib.sh
-# COPY --from=dev --chown=ubuntu:ubuntu /home/ubuntu/intel-extension-for-pytorch/examples/cpu/inference/python/llm/tools/get_libstdcpp_lib.sh ./llm/tools/get_libstdcpp_lib.sh
-# RUN . ./miniconda3/bin/activate && \
-#     conda create -y -n py310 python=3.10 && conda activate py310 && \
-#     echo "conda activate py310" >> ./.bashrc && \
-#     echo "echo \"**Note:** For better performance, please consider to launch workloads with command 'ipexrun'.\"" >> ./.bashrc && \
-#     cd ./llm && \
-#     bash tools/env_setup.sh 1 && \
-#     python -m pip cache purge && \
-#     conda clean -a -y && \
-#     sudo mv ./oneCCL_release /opt/oneCCL && \
-#     sudo chown -R root:root /opt/oneCCL && \
-#     sed -i "s|ONECCL_PATH=.*|ONECCL_PATH=/opt/oneCCL|" ./tools/env_activate.sh
+FROM base AS deploy
+COPY --from=dev --chown=ubuntu:ubuntu /home/ubuntu/intel-extension-for-pytorch/examples/cpu/inference/python/llm ./llm
+RUN rm ./llm/tools/get_libstdcpp_lib.sh
+COPY --from=dev --chown=ubuntu:ubuntu /home/ubuntu/intel-extension-for-pytorch/examples/cpu/inference/python/llm/tools/get_libstdcpp_lib.sh ./llm/tools/get_libstdcpp_lib.sh
+RUN . ./miniconda3/bin/activate && \
+    conda create -y -n py310 python=3.10 && conda activate py310 && \
+    echo "conda activate py310" >> ./.bashrc && \
+    echo "echo \"**Note:** For better performance, please consider to launch workloads with command 'ipexrun'.\"" >> ./.bashrc && \
+    cd ./llm && \
+    bash tools/env_setup.sh 1 && \
+    python -m pip cache purge && \
+    conda clean -a -y && \
+    sudo mv ./oneCCL_release /opt/oneCCL && \
+    sudo chown -R root:root /opt/oneCCL && \
+    sed -i "s|ONECCL_PATH=.*|ONECCL_PATH=/opt/oneCCL|" ./tools/env_activate.sh

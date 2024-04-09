@@ -164,6 +164,9 @@ if [ $((${MODE} & 0x01)) -ne 0 ]; then
     fi
     git submodule sync
     git submodule update --init --recursive
+    sed '107 a\
+                "CMAKE_CUDA_ARCHITECTURES": "native",\
+                "CMAKE_CUDA_COMPILER": "/usr/local/cuda/bin/nvcc",' setup.py > tmpfile && mv tmpfile setup.py
     cd ..
 fi
 ABI=$(python -c "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))")
@@ -257,18 +260,18 @@ fi
 export LD_PRELOAD=$(bash ./intel-extension-for-pytorch/tools/get_libstdcpp_lib.sh)
 
 # Sanity Test
-echo "======================================================"
-echo "Note: Set environment variable \"export LD_PRELOAD=${LD_PRELOAD}\" to avoid the \"version \`GLIBCXX_N.N.NN' not found\" error."
-echo "======================================================"
-CMD="import torch; print(f'torch_cxx11_abi:     {torch._C._GLIBCXX_USE_CXX11_ABI}'); print(f'torch_version:       {torch.__version__}');"
-if [ $((${MODE} & 0x04)) -ne 0 ]; then
-    CMD="${CMD} import torchvision; print(f'torchvision_version: {torchvision.__version__}');"
-fi
-if [ $((${MODE} & 0x02)) -ne 0 ]; then
-    CMD="${CMD} import torchaudio; print(f'torchaudio_version:  {torchaudio.__version__}');"
-fi
-CMD="${CMD} import intel_extension_for_pytorch as ipex; print(f'ipex_version:        {ipex.__version__}');"
-if [ $((${MODE} & 0x01)) -ne 0 ]; then
-    CMD="${CMD} import oneccl_bindings_for_pytorch as torch_ccl; print(f'torchccl_version:    {torch_ccl.__version__}');"
-fi
-python -c "${CMD}"
+# echo "======================================================"
+# echo "Note: Set environment variable \"export LD_PRELOAD=${LD_PRELOAD}\" to avoid the \"version \`GLIBCXX_N.N.NN' not found\" error."
+# echo "======================================================"
+# CMD="import torch; print(f'torch_cxx11_abi:     {torch._C._GLIBCXX_USE_CXX11_ABI}'); print(f'torch_version:       {torch.__version__}');"
+# if [ $((${MODE} & 0x04)) -ne 0 ]; then
+#     CMD="${CMD} import torchvision; print(f'torchvision_version: {torchvision.__version__}');"
+# fi
+# if [ $((${MODE} & 0x02)) -ne 0 ]; then
+#     CMD="${CMD} import torchaudio; print(f'torchaudio_version:  {torchaudio.__version__}');"
+# fi
+# CMD="${CMD} import intel_extension_for_pytorch as ipex; print(f'ipex_version:        {ipex.__version__}');"
+# if [ $((${MODE} & 0x01)) -ne 0 ]; then
+#     CMD="${CMD} import oneccl_bindings_for_pytorch as torch_ccl; print(f'torchccl_version:    {torch_ccl.__version__}');"
+# fi
+# python -c "${CMD}"

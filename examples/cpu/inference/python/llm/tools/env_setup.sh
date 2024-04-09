@@ -156,76 +156,97 @@ if [ $((${MODE} & 0x02)) -ne 0 ]; then
         cp intel-extension-for-pytorch/scripts/compile_bundle.sh .
         sed -i "s/VER_IPEX=.*/VER_IPEX=/" compile_bundle.sh
         bash compile_bundle.sh 1
-        # cp intel-extension-for-pytorch/dist/*.whl ${WHEELFOLDER}
-        # cp torch-ccl/dist/*.whl ${WHEELFOLDER}
-        # rm -rf compile_bundle.sh llvm-project llvm-release torch-ccl
+        cp intel-extension-for-pytorch/dist/*.whl ${WHEELFOLDER}
+        cp torch-ccl/dist/*.whl ${WHEELFOLDER}
+        rm -rf compile_bundle.sh llvm-project llvm-release torch-ccl
     fi
 
-#     echo "python -m pip install cpuid accelerate datasets sentencepiece protobuf==${VER_PROTOBUF} transformers==${VER_TRANSFORMERS} neural-compressor==${VER_INC}" >> ${AUX_INSTALL_SCRIPT}
+    echo "python -m pip install cpuid accelerate datasets sentencepiece protobuf==${VER_PROTOBUF} transformers==${VER_TRANSFORMERS} neural-compressor==${VER_INC}" >> ${AUX_INSTALL_SCRIPT}
 
-#     # Used for accuracy test only
-#     if [ -d lm-evaluation-harness ]; then
-#         rm -rf lm-evaluation-harness
-#     fi
-#     git clone ${REPO_LM_EVA} lm-evaluation-harness
-#     cd lm-evaluation-harness
-#     git checkout ${COMMIT_LM_EVA}
-#     python setup.py bdist_wheel
-#     cp dist/*.whl ${WHEELFOLDER}
-#     cd ..
-#     rm -rf lm-evaluation-harness
+    # Used for accuracy test only
+    if [ -d lm-evaluation-harness ]; then
+        rm -rf lm-evaluation-harness
+    fi
+    git clone ${REPO_LM_EVA} lm-evaluation-harness
+    cd lm-evaluation-harness
+    git checkout ${COMMIT_LM_EVA}
+    python setup.py bdist_wheel
+    cp dist/*.whl ${WHEELFOLDER}
+    cd ..
+    rm -rf lm-evaluation-harness
 
-#     # Install DeepSpeed
-#     if [ $((${MODE} & 0x08)) -ne 0 ]; then
-#         if [ -d DeepSpeed ]; then
-#             rm -rf DeepSpeed
-#         fi
-#         git clone ${REPO_DS_SYCL} DeepSpeed
-#         cd DeepSpeed
-#         git checkout ${COMMIT_DS_SYCL}
-#         python -m pip install -r requirements/requirements.txt
-#         python setup.py bdist_wheel
-#         cp dist/*.whl ${WHEELFOLDER}
-#         cd ..
-#         rm -rf DeepSpeed
-#     else
-#         echo "python -m pip install deepspeed==${VER_DS_SYCL}" >> ${AUX_INSTALL_SCRIPT}
-#     fi
+    # Install DeepSpeed
+    if [ $((${MODE} & 0x08)) -ne 0 ]; then
+        if [ -d DeepSpeed ]; then
+            rm -rf DeepSpeed
+        fi
+        git clone ${REPO_DS_SYCL} DeepSpeed
+        cd DeepSpeed
+        git checkout ${COMMIT_DS_SYCL}
+        python -m pip install -r requirements/requirements.txt
+        python setup.py bdist_wheel
+        cp dist/*.whl ${WHEELFOLDER}
+        cd ..
+        rm -rf DeepSpeed
+    else
+        echo "python -m pip install deepspeed==${VER_DS_SYCL}" >> ${AUX_INSTALL_SCRIPT}
+    fi
 
-#     # Install OneCCL
-#     if [ -d oneCCL ]; then
-#         rm -rf oneCCL
-#     fi
-#     git clone ${REPO_ONECCL} oneCCL
-#     cd oneCCL
-#     git checkout ${COMMIT_ONECCL}
-#     mkdir build
-#     cd build
-#     cmake -DBUILD_EXAMPLES=FALSE -DBUILD_FT=FALSE ..
-#     make -j install
-#     cd ../..
-#     cp -r oneCCL/build/_install ${CCLFOLDER}
-#     rm -rf oneCCL
-#     cd intel-extension-for-pytorch/examples/cpu/inference/python/llm
+    # Install OneCCL
+    if [ -d oneCCL ]; then
+        rm -rf oneCCL
+    fi
+    git clone ${REPO_ONECCL} oneCCL
+    cd oneCCL
+    git checkout ${COMMIT_ONECCL}
+    mkdir build
+    cd build
+    cmake -DBUILD_EXAMPLES=FALSE -DBUILD_FT=FALSE ..
+    make -j install
+    cd ../..
+    cp -r oneCCL/build/_install ${CCLFOLDER}
+    rm -rf oneCCL
+    cd intel-extension-for-pytorch/examples/cpu/inference/python/llm
 fi
-# if [ $((${MODE} & 0x01)) -ne 0 ]; then
-#     conda install -y mkl
-#     conda install -y gperftools -c conda-forge
-#     bash ${AUX_INSTALL_SCRIPT}
-#     python -m pip install ${WHEELFOLDER}/*.whl
-#     rm -rf ${WHEELFOLDER}
-#     if [ -f prompt.json ]; then
-#         rm -f prompt.json
-#     fi
-#     wget https://intel-extension-for-pytorch.s3.amazonaws.com/miscellaneous/llm/prompt.json
-#     cd single_instance
-#     if [ -f prompt.json ]; then
-#         rm -f prompt.json
-#     fi
-#     ln -s ../prompt.json
-#     cd ../distributed
-#     if [ -f prompt.json ]; then
-#         rm -f prompt.json
-#     fi
-#     ln -s ../prompt.json
-# fi
+if [ $((${MODE} & 0x01)) -ne 0 ]; then
+    conda install -y mkl
+    conda install -y gperftools -c conda-forge
+    bash ${AUX_INSTALL_SCRIPT}
+    python -m pip install ${WHEELFOLDER}/*.whl
+    rm -rf ${WHEELFOLDER}
+    if [ -f prompt.json ]; then
+        rm -f prompt.json
+    fi
+    wget https://intel-extension-for-pytorch.s3.amazonaws.com/miscellaneous/llm/prompt.json
+    cd single_instance
+    if [ -f prompt.json ]; then
+        rm -f prompt.json
+    fi
+    ln -s ../prompt.json
+    cd ../distributed
+    if [ -f prompt.json ]; then
+        rm -f prompt.json
+    fi
+    ln -s ../prompt.json
+fi
+if [ $((${MODE} & 0x01)) -ne 0 ]; then
+    conda install -y mkl
+    conda install -y gperftools -c conda-forge
+    bash ${AUX_INSTALL_SCRIPT}
+    python -m pip install ${WHEELFOLDER}/*.whl
+    rm -rf ${WHEELFOLDER}
+    if [ -f prompt.json ]; then
+        rm -f prompt.json
+    fi
+    wget https://intel-extension-for-pytorch.s3.amazonaws.com/miscellaneous/llm/prompt.json
+    cd single_instance
+    if [ -f prompt.json ]; then
+        rm -f prompt.json
+    fi
+    ln -s ../prompt.json
+    cd ../distributed
+    if [ -f prompt.json ]; then
+        rm -f prompt.json
+    fi
+    ln -s ../prompt.json
+fi
