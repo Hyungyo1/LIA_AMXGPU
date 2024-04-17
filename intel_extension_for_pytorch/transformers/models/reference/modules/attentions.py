@@ -342,21 +342,30 @@ def _OPTAttention_forward(
             .contiguous()
         )
     else:
-        key = (
-            self.k_proj(hidden_states)
-            .view(bsz, tgt_len, self.num_heads, self.head_dim)
-            .contiguous()
-        )
-        value = (
-            self.v_proj(hidden_states)
-            .view(bsz, tgt_len, self.num_heads, self.head_dim)
-            .contiguous()
-        )
-    query = (
-        self.q_proj(hidden_states)
-        .view(bsz, tgt_len, self.num_heads, self.head_dim)
-        .contiguous()
-    )
+        # key = (
+        #     self.k_proj(hidden_states)
+        #     .view(bsz, tgt_len, self.num_heads, self.head_dim)
+        #     .contiguous()
+        # )
+        # value = (
+        #     self.v_proj(hidden_states)
+        #     .view(bsz, tgt_len, self.num_heads, self.head_dim)
+        #     .contiguous()
+        # )
+
+        hidden = hidden_states.view(bsz * tgt_len, self.num_heads * self.head_dim)
+        w_k = (self.k_proj.weight.permute([0,3,1,2,4])).contiguous().view(2048, 2048)
+        key = (torch.matmul(hidden, w_k.t()) + self.k_proj.bias).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        w_v = (self.v_proj.weight.permute([0,3,1,2,4])).contiguous().view(2048, 2048)
+        value = (torch.matmul(hidden, w_v.t()) + self.v_proj.bias).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+    # query = (
+    #     self.q_proj(hidden_states)
+    #     .view(bsz, tgt_len, self.num_heads, self.head_dim)
+    #     .contiguous()
+    # )
+ 
+    w_q = (self.q_proj.weight.permute([0,3,1,2,4])).contiguous().view(2048, 2048)
+    query = (torch.matmul(hidden, w_q.t()) + self.q_proj.bias).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
 
     (
         attn_output,
