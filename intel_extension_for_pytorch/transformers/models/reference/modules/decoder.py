@@ -91,6 +91,20 @@ def OPTDecoderLayer_forward(
     if not self.distributed:
         hidden_states = self.mha_linear_add(hidden_states, residual)
     else:
+#        cur_dev = hidden_states.device
+#        d_model = self.num_heads * self.head_dim
+#        hidden = hidden_states.view(bsz * tgt_len, 2 * d_model)
+#        w_o = (self.out_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+#        b_o = self.out_proj.bias
+#        hidden = hidden.to('cuda')
+#        w_o = w_o.to('cuda')
+#        b_o = b_o.to('cuda')
+#        hidden = (torch.matmul(hidden, w_o.t()) + b_o).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+#        hidden = nn.functional.dropout(
+#            hidden, p=self.dropout, training=self.training
+#        )
+#        hidden_states = hidden.to(cur_dev)
+#        del hidden, w_o, b_o
         hidden_states = self.self_attn.out_proj(hidden_states)
         hidden_states = nn.functional.dropout(
             hidden_states, p=self.dropout, training=self.training
