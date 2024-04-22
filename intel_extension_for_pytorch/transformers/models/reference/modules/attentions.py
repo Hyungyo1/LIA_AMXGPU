@@ -353,19 +353,37 @@ def _OPTAttention_forward(
         #     .contiguous()
         # )
 
-        hidden = hidden_states.view(bsz * tgt_len, self.num_heads * self.head_dim)
-        w_k = (self.k_proj.weight.permute([0,3,1,2,4])).contiguous().view(2048, 2048)
-        key = (torch.matmul(hidden, w_k.t()) + self.k_proj.bias).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-        w_v = (self.v_proj.weight.permute([0,3,1,2,4])).contiguous().view(2048, 2048)
-        value = (torch.matmul(hidden, w_v.t()) + self.v_proj.bias).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        cur_dev = hidden_states.device
+        d_model = self.num_heads * self.head_dim
+        hidden = hidden_states.view(bsz * tgt_len, 2 * d_model)
+        w_k = (self.k_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+        w_v = (self.v_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+        b_k = self.k_proj.bias
+        b_v = self.v_proj.bias
+        hidden = hidden.to('cuda')
+        w_k = w_k.to('cuda')
+        w_v = w_v.to('cuda')
+        b_k = b_k.to('cuda')
+        b_v = b_v.to('cuda')
+        key = (torch.matmul(hidden, w_k.t()) + b_k).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        value = (torch.matmul(hidden, w_v.t()) + b_v).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        key = key.to(cur_dev)
+        value = value.to(cur_dev)
+        del w_k, w_v, b_k, b_v
+
     # query = (
     #     self.q_proj(hidden_states)
     #     .view(bsz, tgt_len, self.num_heads, self.head_dim)
     #     .contiguous()
     # )
  
-    w_q = (self.q_proj.weight.permute([0,3,1,2,4])).contiguous().view(2048, 2048)
-    query = (torch.matmul(hidden, w_q.t()) + self.q_proj.bias).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+    w_q = (self.q_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+    b_q = self.q_proj.bias
+    w_q = w_q.to('cuda')
+    b_q = b_q.to('cuda')
+    query = (torch.matmul(hidden, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+    query = query.to(cur_dev)
+    del hidden, w_q, b_q
 
     (
         attn_output,
