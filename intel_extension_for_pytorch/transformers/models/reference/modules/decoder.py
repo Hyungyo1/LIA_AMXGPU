@@ -91,24 +91,24 @@ def OPTDecoderLayer_forward(
     if not self.distributed:
         hidden_states = self.mha_linear_add(hidden_states, residual)
     else:
-#        cur_dev = hidden_states.device
-#        d_model = self.num_heads * self.head_dim
-#        hidden = hidden_states.view(bsz * tgt_len, 2 * d_model)
-#        w_o = (self.out_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-#        b_o = self.out_proj.bias
-#        hidden = hidden.to('cuda')
-#        w_o = w_o.to('cuda')
-#        b_o = b_o.to('cuda')
-#        hidden = (torch.matmul(hidden, w_o.t()) + b_o).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-#        hidden = nn.functional.dropout(
-#            hidden, p=self.dropout, training=self.training
+        cur_dev = hidden_states.device
+        bsz, tgt_len, d_model = hidden_states.size()
+        hidden = hidden_states
+        w_o = (self.self_attn.out_proj.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
+        b_o = self.self_attn.out_proj.bias
+        hidden = hidden.to('cuda')
+        w_o = w_o.to('cuda')
+        if b_o is not None:
+            b_o = b_o.to('cuda')
+            hidden = (torch.matmul(hidden, w_o.t())+b_o).view(bsz, tgt_len, 2 * d_model).contiguous()
+        else:
+            hidden = (torch.matmul(hidden, w_o.t())).view(bsz, tgt_len, 2 * d_model).contiguous()
+        hidden_states = hidden.to(cur_dev)
+        del hidden, w_o
+#        hidden_states = self.self_attn.out_proj(hidden_states)
+#        hidden_states = nn.functional.dropout(
+#            hidden_states, p=self.dropout, training=self.training
 #        )
-#        hidden_states = hidden.to(cur_dev)
-#        del hidden, w_o, b_o
-        hidden_states = self.self_attn.out_proj(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
         hidden_states = residual + hidden_states
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
@@ -122,17 +122,51 @@ def OPTDecoderLayer_forward(
     if self.do_layer_norm_before:
         hidden_states = self.final_layer_norm(hidden_states)
 
-    hidden_states = self.linear_relu(hidden_states)
+    if not self.distributed:
+        hidden_states = self.linear_relu(hidden_states)
+
+    else:
+        bsz, tgt_len, d_model = hidden_states.size()
+        hidden = hidden_states
+        w_fc1 = (self.linear_relu.linear.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
+        b_fc1 = self.linear_relu.linear.bias
+        hidden = hidden.to('cuda')
+        w_fc1 = w_fc1.to('cuda')
+        if b_fc1 is not None:
+            b_fc1 = b_fc1.to('cuda')
+            hidden = (torch.matmul(hidden, w_fc1.t())+b_fc1).view(bsz, tgt_len, 2 * d_model).contiguous()
+        else:
+            hidden = (torch.matmul(hidden, w_fc1.t())).view(bsz, tgt_len, 2 * d_model).contiguous()
+        hidden = nn.functional.relu(hidden)
+        hidden_states = hidden.to(cur_dev)
+        del hidden, w_fc1, b_fc1
+        
+        # hidden_states = self.fc1(hidden_states)
+        # hidden_states = nn.function.relu(hidden_states)
 
     if not self.distributed:
         hidden_states = self.mlp_linear_add(hidden_states, residual).view(
             hidden_states_shape
         )
     else:
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )
+        bsz, tgt_len, d_model = hidden_states.size()
+        hidden = hidden_states
+        w_fc2 = (self.fc2.weight.permute([0,3,1,2,4])).contiguous().view(int(d_model/2), d_model)
+        b_fc2 = self.fc2.bias
+        hidden = hidden.to('cuda')
+        w_fc2 = w_fc2.to('cuda')
+        if b_fc2 is not None:
+            b_fc2 = b_fc2.to('cuda')
+            hidden = (torch.matmul(hidden, w_fc2.t())+b_fc2).view(bsz, tgt_len, int(d_model/2)).contiguous()
+        else:
+            hidden = (torch.matmul(hidden, w_fc2.t())).view(bsz, tgt_len, int(d_model/2)).contiguous()
+        hidden_states = hidden.to(cur_dev)
+        del hidden, w_fc2, b_fc2
+
+        # hidden_states = self.fc2(hidden_states)
+        # hidden_states = nn.functional.dropout(
+        #     hidden_states, p=self.dropout, training=self.training
+        # )
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
 
     # 350m applies layer norm AFTER attention

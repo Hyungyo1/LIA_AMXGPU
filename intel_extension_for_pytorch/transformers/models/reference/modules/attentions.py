@@ -367,8 +367,6 @@ def _OPTAttention_forward(
         b_v = b_v.to('cuda')
         key = (torch.matmul(hidden, w_k.t()) + b_k).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
         value = (torch.matmul(hidden, w_v.t()) + b_v).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-        key = key.to(cur_dev)
-        value = value.to(cur_dev)
         del w_k, w_v, b_k, b_v
 
     # query = (
@@ -382,22 +380,34 @@ def _OPTAttention_forward(
     w_q = w_q.to('cuda')
     b_q = b_q.to('cuda')
     query = (torch.matmul(hidden, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-    query = query.to(cur_dev)
     del hidden, w_q, b_q
+    if past_key_value is not None:
+        key = key.to(cur_dev)
+        value = value.to(cur_dev)
+        query = query.to(cur_dev)
+        (
+            attn_output,
+            attn_weights,
+            past_key_value_decoder,
+        ) = self._IPEXScaleDotProduct(
+            query,
+            key,
+            value,
+            1 / self.scaling,
+            past_key_value,
+            layer_head_mask,
+            attention_mask,
+        )
+    else:
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
 
-    (
-        attn_output,
-        attn_weights,
-        past_key_value_decoder,
-    ) = self._IPEXScaleDotProduct(
-        query,
-        key,
-        value,
-        1 / self.scaling,
-        past_key_value,
-        layer_head_mask,
-        attention_mask,
-    )
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.bfloat16)
 
     if self.is_decoder:
         past_key_value = past_key_value_decoder
