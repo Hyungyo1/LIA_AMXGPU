@@ -129,6 +129,7 @@ def OPTDecoderLayer_forward(
         # hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = F.layer_norm(
             hidden_states, ln.normalized_shape, ln.weight, ln.bias, ln.eps)
+        del ln
 
     if not self.distributed:
         hidden_states = self.linear_relu(hidden_states)
