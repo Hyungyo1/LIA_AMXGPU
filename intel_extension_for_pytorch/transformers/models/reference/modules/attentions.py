@@ -12,6 +12,12 @@ from ..fusions.linear_fusion import (
 from torch.nn import functional as F
 from intel_extension_for_pytorch.nn.modules import WeightOnlyQuantizedLinear
 
+def custom_softmax(logits, dim=-1, dtype=torch.float32):
+    # Compute softmax probabilities
+    logits = logits.to(dtype)
+    exp_logits = torch.exp(logits - torch.max(logits, dim=dim, keepdim=True)[0])
+    softmax_probs = exp_logits / torch.sum(exp_logits, dim=dim, keepdim=True)
+    return softmax_probs
 
 def _GPTJAttention_forward(
     self,
@@ -381,7 +387,7 @@ def _OPTAttention_forward(
     b_q = b_q.to('cuda')
     query = (torch.matmul(hidden, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
     del hidden, w_q, b_q
-    if past_key_value is not None:
+    if past_key_value is None:
         key = key.to(cur_dev)
         value = value.to(cur_dev)
         query = query.to(cur_dev)
@@ -399,18 +405,58 @@ def _OPTAttention_forward(
             attention_mask,
         )
     else:
+        attention_mask = attention_mask.to('cuda')
+        query = query * self.scaling
+        past_key_value_decoder = (key.to(cur_dev), value.to(cur_dev))
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        query = query.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
+        key = key.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
+        value = value.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        src_len = key.size(1)
+        attn_weights = torch.bmm(query, key.transpose(1, 2))
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.bfloat16)
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = torch.max(
+                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+            )
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-    if self.is_decoder:
-        past_key_value = past_key_value_decoder
+        attn_weights = custom_softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.bfloat16)
+
+        if layer_head_mask is not None:
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
+                )
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        if output_attentions:
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = torch.bmm(attn_probs, value)
+
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+        attn_output = attn_output.to(cur_dev)
+        if attn_weights_reshaped is not None:
+            attn_weights_reshaped = attn_weights_reshaped.to(cur_dev)
+        attention_mask = attention_mask.to(cur_dev)
 
     if not output_attentions:
         attn_weights_reshaped = None
