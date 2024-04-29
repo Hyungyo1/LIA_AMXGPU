@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from typing import Optional, Tuple, Union, List
+import deepspeed.comm as dist
 from ...reference.fusions.linear_fusion import (
     _IPEXlinearAddRef,
     _IPEXlinearAddAddRef,
@@ -13,6 +14,76 @@ from ...reference.fusions.linear_fusion import (
 from torch.nn import functional as F
 from .....utils._logger import logger, WarningType
 
+def gpu_mha_linear_load(self, hidden_states):
+    bsz, tgt_len, d_model = hidden_states.size()
+    w_o = (self.self_attn.out_proj.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
+    b_o = self.self_attn.out_proj.bias
+    hidden_states = hidden_states.to('cuda')
+    w_o = w_o.to('cuda')
+    if b_o is not None:
+        b_o = b_o.to('cuda')
+    return hidden_states, w_o, b_o
+
+def gpu_fc1_linear_load(self, hidden_states):
+    bsz, tgt_len, d_model = hidden_states.size()
+    w_fc1 = (self.linear_relu.linear.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
+    b_fc1 = self.linear_relu.linear.bias
+    hidden_states = hidden_states.to('cuda')
+    w_fc1 = w_fc1.to('cuda')
+    if b_fc1 is not None:
+        b_fc1 = b_fc1.to('cuda')
+    return hidden_states, w_fc1, b_fc1
+
+def gpu_fc2_linear_load(self, hidden_states):
+    bsz, tgt_len, d_model = hidden_states.size()
+    w_fc2 = (self.fc2.weight.permute([0,3,1,2,4])).contiguous().view(int(d_model/2), d_model)
+    b_fc2 = self.fc2.bias
+    w_fc2 = w_fc2.to('cuda')
+    if b_fc2 is not None:
+        b_fc2 = b_fc2.to('cuda')
+    return hidden_states, w_fc2, b_fc2
+
+def gpu_linear_allreduce_compute(self, hidden_states, weight, bias):
+    if bias is not None:
+        hidden_states = (torch.matmul(hidden_states, weight.t())+bias).contiguous()
+        del bias
+    else:
+        hidden_states = (torch.matmul(hidden_states, weight.t())).contiguous()
+
+    # torch.ops.deepspeed_comm.all_reduce(hidden_states)
+    # torch.distributed.all_reduce(hidden_states)
+
+    del weight, bias
+
+    return hidden_states
+
+def gpu_linear_relu_compute(self, hidden_states, weight, bias):
+    if bias is not None:
+        hidden_states = (torch.matmul(hidden_states, weight.t())+bias).contiguous()
+        del bias
+    else:
+        hidden_states = (torch.matmul(hidden_states, weight.t())).contiguous()
+    
+    hidden_states = nn.functional.relu(hidden_states)
+    del weight
+
+    return hidden_states
+
+def gpu_attn_ln_load(self, hidden_states):
+    hidden_states = hidden_states.to('cuda')
+    ln = self.self_attn_layer_norm.to('cuda')
+    return hidden_states, ln
+
+def gpu_final_ln_load(self, hidden_states):
+    hidden_states = hidden_states.to('cuda')
+    ln = self.final_layer_norm.to('cuda')
+    return hidden_states, ln
+
+def gpu_ln_compute(self, hidden_states, ln):
+    hidden_states = F.layer_norm(
+            hidden_states, ln.normalized_shape, ln.weight, ln.bias, ln.eps)
+    del ln
+    return hidden_states
 
 def LlamaDecoderLayer_forward(
     self,
@@ -74,11 +145,22 @@ def OPTDecoderLayer_forward(
     use_cache: Optional[bool] = False,
     past_key_value: Optional[Tuple[torch.Tensor]] = None,
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    
+    policy = 1
+    cur_dev = hidden_states.device
+    hidden_states = hidden_states.to('cuda')
     residual = hidden_states
-
+    
     # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
     if self.do_layer_norm_before:
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # GPU
+        if policy % 2:
+            hidden_states, ln = gpu_attn_ln_load(self, hidden_states)
+            hidden_states = gpu_ln_compute(self, hidden_states, ln)
+
+        # AMX
+        else:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
     # Self Attention
     hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -90,31 +172,19 @@ def OPTDecoderLayer_forward(
     )
     if not self.distributed:
         hidden_states = self.mha_linear_add(hidden_states, residual)
-    else:
-        cur_dev = hidden_states.device
-        bsz, tgt_len, d_model = hidden_states.size()
-        hidden = hidden_states
-        w_o = (self.self_attn.out_proj.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
-        b_o = self.self_attn.out_proj.bias
-        hidden = hidden.to('cuda')
-        w_o = w_o.to('cuda')
-        if b_o is not None:
-            b_o = b_o.to('cuda')
-            hidden = (torch.matmul(hidden, w_o.t())+b_o).view(bsz, tgt_len, 2 * d_model).contiguous()
-            del b_o
+    else:        
+        # GPU Compute
+        if policy % 2:
+            hidden_states, weight, bias = gpu_mha_linear_load(self, hidden_states)
+            hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
+
+        # AMX Compute
         else:
-            hidden = (torch.matmul(hidden, w_o.t())).view(bsz, tgt_len, 2 * d_model).contiguous()
-        
-        # hidden_states = hidden.to(cur_dev)
-        # del hidden, w_o
-        del w_o
-        # hidden_states = self.self_attn.out_proj(hidden_states)
-        # hidden_states = nn.functional.dropout(
-        #     hidden_states, p=self.dropout, training=self.training
-        # )
-        # hidden_states = residual + hidden_states
-        residual = residual.to('cuda')
-        hidden_states = residual + hidden
+            hidden_states = self.self_attn.out_proj(hidden_states)
+
+        # Common
+        hidden_states = residual + hidden_states
+
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -125,59 +195,49 @@ def OPTDecoderLayer_forward(
 
     # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
     if self.do_layer_norm_before:
-        ln = self.final_layer_norm.to('cuda')
-        # hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = F.layer_norm(
-            hidden_states, ln.normalized_shape, ln.weight, ln.bias, ln.eps)
-        del ln
+        # GPU
+        if policy % 2:
+            hidden_states, ln = gpu_final_ln_load(self, hidden_states)
+            hidden_states = gpu_ln_compute(self, hidden_states, ln)
+        
+        # AMX
+        else:
+            hidden_states = self.final_layer_norm(hidden_states)
 
     if not self.distributed:
         hidden_states = self.linear_relu(hidden_states)
 
     else:
-        bsz, tgt_len, d_model = hidden_states.size()
-        hidden = hidden_states
-        w_fc1 = (self.linear_relu.linear.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
-        b_fc1 = self.linear_relu.linear.bias
-        # hidden = hidden.to('cuda')
-        w_fc1 = w_fc1.to('cuda')
-        if b_fc1 is not None:
-            b_fc1 = b_fc1.to('cuda')
-            hidden = (torch.matmul(hidden, w_fc1.t())+b_fc1).view(bsz, tgt_len, 2 * d_model).contiguous()
-        else:
-            hidden = (torch.matmul(hidden, w_fc1.t())).view(bsz, tgt_len, 2 * d_model).contiguous()
-        hidden = nn.functional.relu(hidden)
-        hidden_states = hidden.to(cur_dev)
-        del hidden, w_fc1, b_fc1
+        # GPU Compute
+        if policy % 2:
+            hidden_states, weight, bias = gpu_fc1_linear_load(self, hidden_states)
+            hidden_states = gpu_linear_relu_compute(self, hidden_states, weight, bias)
         
-        # hidden_states = self.fc1(hidden_states)
-        # hidden_states = nn.function.relu(hidden_states)
+        # AMX Compute
+        else:
+            hidden_states = self.linear_relu(hidden_states)
 
     if not self.distributed:
         hidden_states = self.mlp_linear_add(hidden_states, residual).view(
             hidden_states_shape
         )
     else:
-        bsz, tgt_len, d_model = hidden_states.size()
-        hidden = hidden_states
-        w_fc2 = (self.fc2.weight.permute([0,3,1,2,4])).contiguous().view(int(d_model/2), d_model)
-        b_fc2 = self.fc2.bias
-        hidden = hidden.to('cuda')
-        w_fc2 = w_fc2.to('cuda')
-        if b_fc2 is not None:
-            b_fc2 = b_fc2.to('cuda')
-            hidden = (torch.matmul(hidden, w_fc2.t())+b_fc2).view(bsz, tgt_len, int(d_model/2)).contiguous()
+        # GPU Compute
+        if policy % 2:
+            hidden_states, weight, bias = gpu_fc2_linear_load(self, hidden_states)
+            hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
+
+        # AMX Compute
         else:
-            hidden = (torch.matmul(hidden, w_fc2.t())).view(bsz, tgt_len, int(d_model/2)).contiguous()
+            hidden_states = self.fc2(hidden_states)
+            hidden_states = nn.functional.dropout(
+                hidden_states, p=self.dropout, training=self.training
+            )
 
-        # hidden_states = self.fc2(hidden_states)
-        # hidden_states = nn.functional.dropout(
-        #     hidden_states, p=self.dropout, training=self.training
-        # )
-        hidden_states = (residual + hidden).view(hidden_states_shape)
-        hidden_states = hidden_states.to(cur_dev)
-        del hidden, w_fc2, b_fc2
-
+        # Common
+        hidden_states = (residual + hidden_states).view(hidden_states_shape)
+    
+    hidden_states = hidden_states.to(cur_dev)
 
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:

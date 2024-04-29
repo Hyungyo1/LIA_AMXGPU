@@ -348,6 +348,7 @@ def _OPTAttention_forward(
             .contiguous()
         )
     else:
+        # # AMX Compute
         # key = (
         #     self.k_proj(hidden_states)
         #     .view(bsz, tgt_len, self.num_heads, self.head_dim)
@@ -359,34 +360,37 @@ def _OPTAttention_forward(
         #     .contiguous()
         # )
 
+        # GPU Compute
         cur_dev = hidden_states.device
         d_model = self.num_heads * self.head_dim
-        hidden = hidden_states.view(bsz * tgt_len, 2 * d_model)
+        hidden_states = hidden_states.view(bsz * tgt_len, 2 * d_model)
         w_k = (self.k_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
         w_v = (self.v_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
         b_k = self.k_proj.bias
         b_v = self.v_proj.bias
-        hidden = hidden.to('cuda')
+        hidden_states = hidden_states.to('cuda')
         w_k = w_k.to('cuda')
         w_v = w_v.to('cuda')
         b_k = b_k.to('cuda')
         b_v = b_v.to('cuda')
-        key = (torch.matmul(hidden, w_k.t()) + b_k).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-        value = (torch.matmul(hidden, w_v.t()) + b_v).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        key = (torch.matmul(hidden_states, w_k.t()) + b_k).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+        value = (torch.matmul(hidden_states, w_v.t()) + b_v).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
         del w_k, w_v, b_k, b_v
 
+    # # AMX Compute
     # query = (
     #     self.q_proj(hidden_states)
     #     .view(bsz, tgt_len, self.num_heads, self.head_dim)
     #     .contiguous()
     # )
- 
+
+    # # GPU Compute
     w_q = (self.q_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
     b_q = self.q_proj.bias
     w_q = w_q.to('cuda')
     b_q = b_q.to('cuda')
-    query = (torch.matmul(hidden, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-    del hidden, w_q, b_q
+    query = (torch.matmul(hidden_states, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
+    del w_q, b_q
     if past_key_value is None:
         key = key.to(cur_dev)
         value = value.to(cur_dev)
@@ -427,7 +431,8 @@ def _OPTAttention_forward(
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = custom_softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.bfloat16)
+        # attn_weights = custom_softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.bfloat16)
+        # attn_weights = custom_softmax(attn_weights, dim=-1).to(torch.bfloat16)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -444,20 +449,18 @@ def _OPTAttention_forward(
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value)
+        attn_output = torch.bmm(attn_weights, value)
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
-        attn_output = attn_output.to(cur_dev)
-        if attn_weights_reshaped is not None:
-            attn_weights_reshaped = attn_weights_reshaped.to(cur_dev)
-        attention_mask = attention_mask.to(cur_dev)
+        # attn_output = attn_output.to(cur_dev)
+        # if attn_weights_reshaped is not None:
+        #     attn_weights_reshaped = attn_weights_reshaped.to(cur_dev)
 
+    # Common
     if not output_attentions:
         attn_weights_reshaped = None
     attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
