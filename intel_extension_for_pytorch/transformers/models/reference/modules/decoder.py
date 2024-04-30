@@ -147,7 +147,6 @@ def OPTDecoderLayer_forward(
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
     
     policy = 1
-    cur_dev = hidden_states.device
     hidden_states = hidden_states.to('cuda')
     residual = hidden_states
     
@@ -237,7 +236,7 @@ def OPTDecoderLayer_forward(
         # Common
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
     
-    hidden_states = hidden_states.to(cur_dev)
+    hidden_states = hidden_states.to('cpu')
 
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:

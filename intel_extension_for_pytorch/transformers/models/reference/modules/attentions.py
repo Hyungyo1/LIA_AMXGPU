@@ -432,7 +432,7 @@ def _OPTAttention_forward(
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # attn_weights = custom_softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.bfloat16)
-        # attn_weights = custom_softmax(attn_weights, dim=-1).to(torch.bfloat16)
+        attn_weights = custom_softmax(attn_weights, dim=-1).to(torch.bfloat16)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
