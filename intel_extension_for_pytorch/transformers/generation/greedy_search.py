@@ -276,7 +276,25 @@ def _greedy_search(
                 self, "prepare_inputs_labels_for_multimodal"
             ):
                 model_inputs = self.prepare_inputs_labels_for_multimodal(**model_inputs)
-            if hasattr(self, "trace_graph"):
+            # if hasattr(self, "trace_graph") and first_token:
+            #     model_inputs.pop("use_cache", None)
+            #     model_inputs.pop("token_type_ids", None)
+            #     if "return_last_logit" in model_inputs:
+            #         model_inputs["return_last_logit"] = torch.tensor(
+            #             model_inputs["return_last_logit"]
+            #         )
+            #     if self.model_backbone == "T5ForConditionalGeneration":
+            #         model_inputs.pop("head_mask", None)
+            #         model_inputs.pop("decoder_head_mask", None)
+            #         model_inputs.pop("decoder_attention_mask", None)
+            #         model_inputs.pop("cross_attn_head_mask", None)
+            #         model_inputs["encoder_outputs"] = (
+            #             model_inputs["encoder_outputs"]["last_hidden_state"],
+            #         )
+            #     print("Prefill")
+            #     outputs = self.trace_graph_first(**model_inputs)
+
+            elif hasattr(self, "trace_graph") and not first_token: 
                 model_inputs.pop("use_cache", None)
                 model_inputs.pop("token_type_ids", None)
                 if "return_last_logit" in model_inputs:
@@ -291,6 +309,7 @@ def _greedy_search(
                     model_inputs["encoder_outputs"] = (
                         model_inputs["encoder_outputs"]["last_hidden_state"],
                     )
+                print("Decoding")
                 outputs = self.trace_graph(**model_inputs)
             else:
                 outputs = self(

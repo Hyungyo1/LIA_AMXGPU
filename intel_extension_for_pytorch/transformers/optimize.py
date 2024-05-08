@@ -882,6 +882,170 @@ def get_dummy_input(_model, return_dict=False):
             sample_inputs = sample_inputs + (torch.tensor(True),)
     return sample_inputs
 
+def get_dummy_input_prefill(_model, return_dict=False):
+    sample_inputs = None
+
+    if hasattr(_model.config, "n_layer"):
+        model_num_layers = _model.config.n_layer
+    elif hasattr(_model.config, "num_hidden_layers"):
+        model_num_layers = _model.config.num_hidden_layers
+    elif hasattr(_model.config, "num_layers"):
+        model_num_layers = _model.config.num_layers
+    elif hasattr(_model.config, "n_layers"):
+        model_num_layers = _model.config.n_layers
+    else:
+        AssertionError(
+            False,
+            "Cannot support the dummy sample_inputs for your model, please use your sample_inputs as the inputs and run again",
+        )
+    past_key_values = tuple(
+        [
+            (
+                (
+                    torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
+                    torch.zeros([1, 1, 1, 1]).contiguous(),
+                    torch.zeros([1, 1, 1, 1]).contiguous(),
+                    torch.zeros(1, 4, dtype=torch.long),
+                )
+                if _model.config.architectures[0] != "T5ForConditionalGeneration"
+                else (
+                    torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
+                    torch.zeros([1, 1, 1, 1]).contiguous(),
+                    torch.zeros([1, 1, 1, 1]).contiguous(),
+                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
+                    torch.zeros(
+                        [
+                            32,
+                            1,
+                            _model.decoder.block[i].layer[1].EncDecAttention.n_heads,
+                            _model.decoder.block[i]
+                            .layer[1]
+                            .EncDecAttention.key_value_proj_dim,
+                        ]
+                    ).contiguous(),
+                    torch.zeros(
+                        [
+                            32,
+                            1,
+                            _model.decoder.block[i].layer[1].EncDecAttention.n_heads,
+                            _model.decoder.block[i]
+                            .layer[1]
+                            .EncDecAttention.key_value_proj_dim,
+                        ]
+                    ).contiguous(),
+                    torch.zeros(1, 4, dtype=torch.long),
+                )
+            )
+            for i in range(model_num_layers)
+        ]
+    )
+
+    input_ids = torch.ones(64).to(torch.long).unsqueeze(0)
+    attention_mask = torch.ones_like(input_ids)
+    # prepare_inputs_for_generation is just for checking if position_ids should be in the model inputs,
+    # input input_ids and attention_mask to make sure this func can generate the correct position_ids.
+    model_inputs = _model.prepare_inputs_for_generation(
+        input_ids, attention_mask=attention_mask
+    )
+    has_position_ids = model_inputs.get("position_ids", None) is not None
+    position_ids = torch.arange(input_ids.shape[-1]).unsqueeze(0)
+    if has_position_ids:
+        sample_inputs = (
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            if return_dict
+            else (input_ids, attention_mask, past_key_values, position_ids)
+        )
+    elif _model.config.architectures[0] == "T5ForConditionalGeneration":
+        last_hidden_state = torch.rand([1, 32, 2048])
+        sample_inputs = (
+            (
+                {
+                    "decoder_input_ids": torch.ones(1).to(torch.long).unsqueeze(0),
+                    "attention_mask": attention_mask,
+                    "past_key_values": past_key_values,
+                    "encoder_outputs": (last_hidden_state,),
+                }
+            )
+            if return_dict
+            else (
+                torch.ones(1).to(torch.long).unsqueeze(0),
+                attention_mask,
+                past_key_values,
+                (last_hidden_state,),
+            )
+        )
+    else:
+        sample_inputs = (
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+            }
+            if return_dict
+            else (input_ids, attention_mask, past_key_values)
+        )
+    if _model.config.architectures[0] == "GitForCausalLM":
+        batch_size = (
+            _model.config.batch_size if hasattr(_model.config, "batch_size") else 1
+        )
+        num_head = _model.git.encoder.layer[0].attention.self.num_attention_heads
+        head_dim = int(
+            _model.git.encoder.layer[0].attention.self.hidden_size / num_head
+        )
+        past_key_values = tuple(
+            [
+                (
+                    torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
+                    torch.zeros([batch_size, num_head, 1, head_dim]).contiguous(),
+                    torch.zeros([batch_size, num_head, 1, head_dim]).contiguous(),
+                    torch.zeros(1, 4, dtype=torch.long),
+                )
+                for i in range(model_num_layers)
+            ]
+        )
+        if return_dict:
+            sample_inputs["input_ids"] = sample_inputs["input_ids"].repeat(
+                batch_size, 1
+            )
+            sample_inputs["attention_mask"] = sample_inputs["attention_mask"].repeat(
+                batch_size, 1
+            )
+            sample_inputs["pixel_values"] = torch.zeros(batch_size, 3, 224, 224)
+            sample_inputs["past_key_values"] = past_key_values
+        else:
+            sample_inputs = (
+                input_ids.repeat(_model.config.batch_size, 1),
+                attention_mask.repeat(_model.config.batch_size, 1),
+                past_key_values,
+                torch.zeros(_model.config.batch_size, 3, 224, 224),
+            )
+    if _model.config.architectures[0] == "LlavaLlamaForCausalLM":
+        batch_size = (
+            _model.config.batch_size if hasattr(_model.config, "batch_size") else 1
+        )
+        if return_dict:
+            sample_inputs.pop("input_ids", None)
+            sample_inputs["inputs_embeds"] = torch.zeros(batch_size, 1, 4096).to(
+                _model.dtype
+            )
+        else:
+            sample_inputs = (
+                torch.zeros(batch_size, 1, 4096).to(_model.dtype),
+            ) + sample_inputs[1:]
+
+    if "return_last_logit" in model_inputs:
+        if return_dict:
+            sample_inputs["return_last_logit"] = torch.tensor(True)
+        else:
+            sample_inputs = sample_inputs + (torch.tensor(True),)
+    return sample_inputs
+
 
 def ipex_quantization_flow(
     _model, dtype, sample_inputs, qconfig, static_qconfig_file=None
@@ -1018,6 +1182,7 @@ def model_convert_lowering(
                 if sample_inputs is None
                 else sample_inputs
             )
+            sample_inputs_prefill = get_dummy_input_prefill(_model, return_dict=True)
             with torch.no_grad(), torch.cpu.amp.autocast(
                 enabled=True if dtype is torch.bfloat16 else False
             ):
@@ -1028,8 +1193,18 @@ def model_convert_lowering(
                     check_trace=False,
                 )
                 trace_model = torch.jit.freeze(trace_model)
+                
+                trace_model_first = torch.jit.trace(
+                    _model,
+                    example_kwarg_inputs=sample_inputs_prefill,
+                    strict=False,
+                    check_trace=False,
+                )
+                trace_model_first = torch.jit.freeze(trace_model_first)
+                
                 _model = _set_optimized_model_for_generation(
-                    _model, optimized_model=trace_model
+                    _model, optimized_model=trace_model, 
+                    first_token_optimized_model=trace_model_first,
                 )
 
     return _model

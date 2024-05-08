@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from typing import Optional, Tuple, Union, List
 import deepspeed.comm as dist
+import copy
 from ...reference.fusions.linear_fusion import (
     _IPEXlinearAddRef,
     _IPEXlinearAddAddRef,
@@ -49,9 +50,9 @@ def gpu_linear_allreduce_compute(self, hidden_states, weight, bias):
         del bias
     else:
         hidden_states = (torch.matmul(hidden_states, weight.t())).contiguous()
-
+    # hidden_states = hidden_states.to('cpu')
     # torch.ops.deepspeed_comm.all_reduce(hidden_states)
-    # torch.distributed.all_reduce(hidden_states)
+    # hidden_states = hidden_states.to('cuda')
 
     del weight, bias
 
@@ -71,15 +72,19 @@ def gpu_linear_relu_compute(self, hidden_states, weight, bias):
 
 def gpu_attn_ln_load(self, hidden_states):
     hidden_states = hidden_states.to('cuda')
-    ln = self.self_attn_layer_norm.to('cuda')
+    ln = copy.deepcopy(self.self_attn_layer_norm)
+    ln = ln.to('cuda')
     return hidden_states, ln
 
 def gpu_final_ln_load(self, hidden_states):
     hidden_states = hidden_states.to('cuda')
-    ln = self.final_layer_norm.to('cuda')
+    ln = copy.deepcopy(self.final_layer_norm)
+    ln = ln.to('cuda')
     return hidden_states, ln
 
 def gpu_ln_compute(self, hidden_states, ln):
+    hidden_states.to('cuda')
+    ln.to('cuda')
     hidden_states = F.layer_norm(
             hidden_states, ln.normalized_shape, ln.weight, ln.bias, ln.eps)
     del ln
@@ -146,8 +151,16 @@ def OPTDecoderLayer_forward(
     past_key_value: Optional[Tuple[torch.Tensor]] = None,
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
     
-    policy = 1
-    hidden_states = hidden_states.to('cuda')
+    is_prefill = False
+    if hidden_states.size(1) == 64:
+        is_prefill = True
+
+    if is_prefill:
+        policy = 1
+        hidden_states = hidden_states.to('cuda')
+    else:
+        policy = 0
+        
     residual = hidden_states
     
     # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
@@ -1449,6 +1462,7 @@ class _IPEXDecoderLayerRef(nn.Module):
         output_router_logits: Optional[bool] = False,
         pixel_values_present: Optional[bool] = False,
         vision: Optional[bool] = False,
+        is_prefill: Optional[bool] = False,
     ):
         if self.model_backbone in ["GPTJForCausalLM", "CodeGenForCausalLM"]:
             return GPTJBlock_forward(
