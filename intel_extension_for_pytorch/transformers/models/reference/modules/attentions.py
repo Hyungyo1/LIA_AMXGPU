@@ -426,12 +426,10 @@ def _OPTAttention_forward(
         attention_mask = attention_mask.to('cuda')
         query = query * scaling
         beam_batch = past_key_value[3].size(1)
-        key_copy = copy.deepcopy(key).repeat(1, beam_batch, 1, 1).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu')
-        value_copy = copy.deepcopy(value).repeat(1, beam_batch, 1, 1).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu')
-        # key_copy = copy.deepcopy(key).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu')
-        # value_copy = copy.deepcopy(value).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu')
-        key_ = torch.zeros([(tgt_len+32), beam_batch, self.num_heads, self.head_dim])
-        value_ = torch.zeros([(tgt_len+32), beam_batch, self.num_heads, self.head_dim])
+        key_copy = key.repeat(1, beam_batch, 1, 1).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu').to(torch.bfloat16)
+        value_copy = value.repeat(1, beam_batch, 1, 1).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu').to(torch.bfloat16)
+        key_ = torch.zeros([(tgt_len+32), beam_batch, self.num_heads, self.head_dim]).to(torch.bfloat16)
+        value_ = torch.zeros([(tgt_len+32), beam_batch, self.num_heads, self.head_dim]).to(torch.bfloat16)
         key_[:tgt_len] = key_copy
         value_[:tgt_len] = value_copy
         past_key_value_decoder = (
@@ -444,7 +442,7 @@ def _OPTAttention_forward(
             ).contiguous(),
             key_,
             value_,
-            torch.zeros((tgt_len+32, beam_batch)),
+            torch.zeros((tgt_len+32, beam_batch)).to(torch.long),
         )
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query = query.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
