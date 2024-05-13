@@ -152,6 +152,8 @@ def OPTDecoderLayer_forward(
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
     
     is_prefill = False
+    # dummy input of length 64 is used for prefill stage trace graph generation
+    # dummy input of length 32 is used for decoding stage trace graph generation
     if hidden_states.size(1) == 64:
         is_prefill = True
 
