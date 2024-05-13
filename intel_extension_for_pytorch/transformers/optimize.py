@@ -741,14 +741,14 @@ def get_dummy_input(_model, return_dict=False):
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                 )
                 if _model.config.architectures[0] != "T5ForConditionalGeneration"
                 else (
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros(
                         [
@@ -770,7 +770,7 @@ def get_dummy_input(_model, return_dict=False):
                             .EncDecAttention.key_value_proj_dim,
                         ]
                     ).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                 )
             )
             for i in range(model_num_layers)
@@ -840,7 +840,7 @@ def get_dummy_input(_model, return_dict=False):
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros([batch_size, num_head, 1, head_dim]).contiguous(),
                     torch.zeros([batch_size, num_head, 1, head_dim]).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                 )
                 for i in range(model_num_layers)
             ]
@@ -905,14 +905,14 @@ def get_dummy_input_prefill(_model, return_dict=False):
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                 )
                 if _model.config.architectures[0] != "T5ForConditionalGeneration"
                 else (
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
                     torch.zeros([1, 1, 1, 1]).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros(
                         [
@@ -934,7 +934,7 @@ def get_dummy_input_prefill(_model, return_dict=False):
                             .EncDecAttention.key_value_proj_dim,
                         ]
                     ).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                 )
             )
             for i in range(model_num_layers)
@@ -1004,7 +1004,7 @@ def get_dummy_input_prefill(_model, return_dict=False):
                     torch.zeros(1, 0, 0, 1, dtype=torch.long).contiguous(),
                     torch.zeros([batch_size, num_head, 1, head_dim]).contiguous(),
                     torch.zeros([batch_size, num_head, 1, head_dim]).contiguous(),
-                    torch.zeros(1, 4, dtype=torch.long),
+                    torch.zeros(1, 1, dtype=torch.long),
                 )
                 for i in range(model_num_layers)
             ]

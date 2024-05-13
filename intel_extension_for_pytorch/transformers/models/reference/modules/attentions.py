@@ -398,7 +398,7 @@ def _OPTAttention_forward(
         w_q = w_q.to('cuda')
         b_q = b_q.to('cuda')
         query = (torch.matmul(hidden_states, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-        del w_q, b_q
+        del w_q, b_q, hidden_states
 
     # Attention on AMX
     if is_prefill is False:
@@ -422,17 +422,13 @@ def _OPTAttention_forward(
 
     # Attention on GPU
     else:
-        scaling = self.scaling
         attention_mask = attention_mask.to('cuda')
-        query = query * scaling
-        beam_batch = past_key_value[3].size(1)
-        key_copy = key.repeat(1, beam_batch, 1, 1).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu').to(torch.bfloat16)
-        value_copy = value.repeat(1, beam_batch, 1, 1).view(tgt_len, beam_batch, self.num_heads, self.head_dim).to('cpu').to(torch.bfloat16)
-        key_ = torch.zeros([(tgt_len+32), beam_batch, self.num_heads, self.head_dim]).to(torch.bfloat16)
-        value_ = torch.zeros([(tgt_len+32), beam_batch, self.num_heads, self.head_dim]).to(torch.bfloat16)
-        key_[:tgt_len] = key_copy
-        value_[:tgt_len] = value_copy
-        past_key_value_decoder = (
+        query = query * self.scaling
+        key_ = torch.zeros([(tgt_len+32), bsz, self.num_heads, self.head_dim]).contiguous().to(torch.bfloat16)
+        value_ = torch.zeros([(tgt_len+32), bsz, self.num_heads, self.head_dim]).contiguous().to(torch.bfloat16)
+        key_[:tgt_len] = key.to('cpu').permute(1,0,2,3).to(torch.bfloat16)
+        value_[:tgt_len] = value.to('cpu').permute(1,0,2,3).to(torch.bfloat16)
+        past_key_value_decoder =(
             torch.empty(
                 1,
                 tgt_len,
@@ -442,8 +438,8 @@ def _OPTAttention_forward(
             ).contiguous(),
             key_,
             value_,
-            torch.zeros((tgt_len+32, beam_batch)).to(torch.long),
-        )
+            torch.zeros((tgt_len+32, past_key_value[3].size(1))).contiguous().to(torch.long),
+            )
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query = query.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
         key = key.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous().view(*proj_shape)
@@ -490,7 +486,7 @@ def _OPTAttention_forward(
         # attn_output = attn_output.to(cur_dev)
         # if attn_weights_reshaped is not None:
         #     attn_weights_reshaped = attn_weights_reshaped.to(cur_dev)
-        del query, key, value
+        del query, key, value, key_, value_, attn_weights
 
     # Common
     if self.is_decoder:
@@ -505,6 +501,7 @@ def _OPTAttention_forward(
     # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
     # partitioned aross GPUs when using tensor-parallelism.
     attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+    del past_key_value_decoder
     return attn_output, attn_weights_reshaped, past_key_value
 
 
