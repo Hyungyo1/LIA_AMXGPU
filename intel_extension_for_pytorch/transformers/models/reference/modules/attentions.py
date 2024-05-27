@@ -372,8 +372,8 @@ def _OPTAttention_forward(
             hidden_states = hidden_states.view(bsz * tgt_len, 2 * d_model)
             w_k = (self.k_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
             w_v = (self.v_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-            b_k = self.k_proj.bias
-            b_v = self.v_proj.bias
+            b_k = torch.tensor(self.k_proj.bias)
+            b_v = torch.tensor(self.v_proj.bias)
             hidden_states = hidden_states.to('cuda')
             w_k = w_k.to('cuda')
             w_v = w_v.to('cuda')
@@ -394,7 +394,7 @@ def _OPTAttention_forward(
     # GPU Compute
     else:
         w_q = (self.q_proj.weight.permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-        b_q = self.q_proj.bias
+        b_q = torch.tensor(self.q_proj.bias)
         w_q = w_q.to('cuda')
         b_q = b_q.to('cuda')
         query = (torch.matmul(hidden_states, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()

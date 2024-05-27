@@ -22,6 +22,7 @@ def gpu_mha_linear_load(self, hidden_states):
     hidden_states = hidden_states.to('cuda')
     w_o = w_o.to('cuda')
     if b_o is not None:
+        b_o = torch.tensor(b_o)
         b_o = b_o.to('cuda')
     return hidden_states, w_o, b_o
 
@@ -32,6 +33,7 @@ def gpu_fc1_linear_load(self, hidden_states):
     hidden_states = hidden_states.to('cuda')
     w_fc1 = w_fc1.to('cuda')
     if b_fc1 is not None:
+        b_fc1 = torch.tensor(b_fc1)
         b_fc1 = b_fc1.to('cuda')
     return hidden_states, w_fc1, b_fc1
 
@@ -41,6 +43,7 @@ def gpu_fc2_linear_load(self, hidden_states):
     b_fc2 = self.fc2.bias
     w_fc2 = w_fc2.to('cuda')
     if b_fc2 is not None:
+        b_fc2 = torch.tensor(b_fc2)
         b_fc2 = b_fc2.to('cuda')
     return hidden_states, w_fc2, b_fc2
 
