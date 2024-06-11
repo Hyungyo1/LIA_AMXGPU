@@ -15,82 +15,51 @@ from ...reference.fusions.linear_fusion import (
 from torch.nn import functional as F
 from .....utils._logger import logger, WarningType
 
-def gpu_mha_linear_load(self, hidden_states):
+def gpu_mha_linear_load(self, hidden_states, w, b):
     bsz, tgt_len, d_model = hidden_states.size()
-    w_o = (self.self_attn.out_proj.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
-    b_o = self.self_attn.out_proj.bias
+    w = w.permute([0,3,1,2,4]).contiguous().view(2 * d_model, d_model)
+    b = torch.Tensor(b)
     hidden_states = hidden_states.to('cuda')
-    w_o = w_o.to('cuda')
-    if b_o is not None:
-        b_o = torch.tensor(b_o)
-        b_o = b_o.to('cuda')
-    return hidden_states, w_o, b_o
+    
+    return hidden_states, w, b
 
-def gpu_fc1_linear_load(self, hidden_states):
+def gpu_fc1_linear_load(self, hidden_states, w, b):
     bsz, tgt_len, d_model = hidden_states.size()
-    w_fc1 = (self.linear_relu.linear.weight.permute([0,3,1,2,4])).contiguous().view(2 * d_model, d_model)
-    b_fc1 = self.linear_relu.linear.bias
+    w = w.permute([0,3,1,2,4]).contiguous().view(2 * d_model, d_model)
+    b = torch.Tensor(b)
     hidden_states = hidden_states.to('cuda')
-    w_fc1 = w_fc1.to('cuda')
-    if b_fc1 is not None:
-        b_fc1 = torch.tensor(b_fc1)
-        b_fc1 = b_fc1.to('cuda')
-    return hidden_states, w_fc1, b_fc1
+    
+    return hidden_states, w, b
 
-def gpu_fc2_linear_load(self, hidden_states):
+def gpu_fc2_linear_load(self, hidden_states, w, b):
     bsz, tgt_len, d_model = hidden_states.size()
-    w_fc2 = (self.fc2.weight.permute([0,3,1,2,4])).contiguous().view(int(d_model/2), d_model)
-    b_fc2 = self.fc2.bias
-    w_fc2 = w_fc2.to('cuda')
-    if b_fc2 is not None:
-        b_fc2 = torch.tensor(b_fc2)
-        b_fc2 = b_fc2.to('cuda')
-    return hidden_states, w_fc2, b_fc2
+    w = w.permute([0,3,1,2,4]).contiguous().view(int(d_model/2), d_model)
+    b = torch.tensor(b)
+    hidden_states = hidden_states.to('cuda')
+
+    return hidden_states, w, b
 
 def gpu_linear_allreduce_compute(self, hidden_states, weight, bias):
-    if bias is not None:
-        hidden_states = (torch.matmul(hidden_states, weight.t())+bias).contiguous()
-        del bias
-    else:
-        hidden_states = (torch.matmul(hidden_states, weight.t())).contiguous()
+    hidden_states = (torch.matmul(hidden_states, weight.t())+bias).contiguous()
     # hidden_states = hidden_states.to('cpu')
     # torch.ops.deepspeed_comm.all_reduce(hidden_states)
     # hidden_states = hidden_states.to('cuda')
 
     del weight, bias
-
     return hidden_states
 
 def gpu_linear_relu_compute(self, hidden_states, weight, bias):
-    if bias is not None:
-        hidden_states = (torch.matmul(hidden_states, weight.t())+bias).contiguous()
-        del bias
-    else:
-        hidden_states = (torch.matmul(hidden_states, weight.t())).contiguous()
-    
+    hidden_states = (torch.matmul(hidden_states, weight.t())+bias).contiguous()
     hidden_states = nn.functional.relu(hidden_states)
-    del weight
-
+    
+    del weight, bias
     return hidden_states
 
-def gpu_attn_ln_load(self, hidden_states):
-    hidden_states = hidden_states.to('cuda')
-    ln = copy.deepcopy(self.self_attn_layer_norm)
-    ln = ln.to('cuda')
-    return hidden_states, ln
-
-def gpu_final_ln_load(self, hidden_states):
-    hidden_states = hidden_states.to('cuda')
-    ln = copy.deepcopy(self.final_layer_norm)
-    ln = ln.to('cuda')
-    return hidden_states, ln
-
-def gpu_ln_compute(self, hidden_states, ln):
+def gpu_ln_compute(self, hidden_states, weight, bias):
     hidden_states.to('cuda')
-    ln.to('cuda')
     hidden_states = F.layer_norm(
-            hidden_states, ln.normalized_shape, ln.weight, ln.bias, ln.eps)
-    del ln
+            hidden_states, self.self_attn_layer_norm.normalized_shape, weight, bias, self.self_attn_layer_norm.eps)
+    
     return hidden_states
 
 def LlamaDecoderLayer_forward(
@@ -152,8 +121,9 @@ def OPTDecoderLayer_forward(
     output_attentions: Optional[bool] = False,
     use_cache: Optional[bool] = False,
     past_key_value: Optional[Tuple[torch.Tensor]] = None,
+    gpu_layer: Optional[Tuple[torch.Tensor]] = None,
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-    
+
     is_prefill = False
     # dummy input of length 64 is used for prefill stage trace graph generation
     # dummy input of length 32 is used for decoding stage trace graph generation
@@ -162,9 +132,12 @@ def OPTDecoderLayer_forward(
 
     if is_prefill:
         policy = 1
-        hidden_states = hidden_states.to('cuda')
     else:
         policy = 0
+
+    # if policy == 1:
+    #     hidden_states = hidden_states.to('cuda')
+
         
     residual = hidden_states
     
@@ -172,27 +145,27 @@ def OPTDecoderLayer_forward(
     if self.do_layer_norm_before:
         # GPU
         if policy % 2:
-            hidden_states, ln = gpu_attn_ln_load(self, hidden_states)
-            hidden_states = gpu_ln_compute(self, hidden_states, ln)
+            hidden_states = gpu_ln_compute(self, hidden_states, gpu_layer[0], gpu_layer[1])
 
         # AMX
         else:
             hidden_states = self.self_attn_layer_norm(hidden_states)
 
     # Self Attention
-    hidden_states, self_attn_weights, present_key_value = self.self_attn(
+    hidden_states, self_attn_weights, present_key_value, key, value = self.self_attn(
         hidden_states=hidden_states,
         past_key_value=past_key_value,
         attention_mask=attention_mask,
         layer_head_mask=layer_head_mask,
         output_attentions=output_attentions,
+        gpu_layer=gpu_layer,
     )
     if not self.distributed:
         hidden_states = self.mha_linear_add(hidden_states, residual)
     else:        
         # GPU Compute
         if policy % 2:
-            hidden_states, weight, bias = gpu_mha_linear_load(self, hidden_states)
+            hidden_states, weight, bias = gpu_mha_linear_load(self, hidden_states, gpu_layer[8], gpu_layer[9])
             hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
 
         # AMX Compute
@@ -214,8 +187,7 @@ def OPTDecoderLayer_forward(
     if self.do_layer_norm_before:
         # GPU
         if policy % 2:
-            hidden_states, ln = gpu_final_ln_load(self, hidden_states)
-            hidden_states = gpu_ln_compute(self, hidden_states, ln)
+            hidden_states = gpu_ln_compute(self, hidden_states, gpu_layer[10], gpu_layer[11])
         
         # AMX
         else:
@@ -227,7 +199,7 @@ def OPTDecoderLayer_forward(
     else:
         # GPU Compute
         if policy % 2:
-            hidden_states, weight, bias = gpu_fc1_linear_load(self, hidden_states)
+            hidden_states, weight, bias = gpu_fc1_linear_load(self, hidden_states, gpu_layer[12], gpu_layer[13])
             hidden_states = gpu_linear_relu_compute(self, hidden_states, weight, bias)
         
         # AMX Compute
@@ -241,7 +213,7 @@ def OPTDecoderLayer_forward(
     else:
         # GPU Compute
         if policy % 2:
-            hidden_states, weight, bias = gpu_fc2_linear_load(self, hidden_states)
+            hidden_states, weight, bias = gpu_fc2_linear_load(self, hidden_states, gpu_layer[14], gpu_layer[15])
             hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
 
         # AMX Compute
@@ -254,7 +226,7 @@ def OPTDecoderLayer_forward(
         # Common
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
     
-    hidden_states = hidden_states.to('cpu')
+    # hidden_states = hidden_states.to('cpu')
 
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
@@ -267,6 +239,10 @@ def OPTDecoderLayer_forward(
 
     if use_cache:
         outputs += (present_key_value,)
+
+    if is_prefill:
+        outputs += (key,)
+        outputs += (value,)
 
     return outputs
 
@@ -1468,6 +1444,7 @@ class _IPEXDecoderLayerRef(nn.Module):
         pixel_values_present: Optional[bool] = False,
         vision: Optional[bool] = False,
         is_prefill: Optional[bool] = False,
+        gpu_layer: Optional[Tuple[torch.Tensor]] = None,
     ):
         if self.model_backbone in ["GPTJForCausalLM", "CodeGenForCausalLM"]:
             return GPTJBlock_forward(
@@ -1499,6 +1476,7 @@ class _IPEXDecoderLayerRef(nn.Module):
                 output_attentions,
                 use_cache,
                 past_key_value,
+                gpu_layer,
             )
         elif (
             self.model_backbone == "FalconForCausalLM"

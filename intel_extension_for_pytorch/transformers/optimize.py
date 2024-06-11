@@ -1194,14 +1194,16 @@ def model_convert_lowering(
                 )
                 trace_model = torch.jit.freeze(trace_model)
                 
-                trace_model_first = torch.jit.trace(
-                    _model,
-                    example_kwarg_inputs=sample_inputs_prefill,
-                    strict=False,
-                    check_trace=False,
-                )
-                trace_model_first = torch.jit.freeze(trace_model_first)
-                
+                # trace_model_first = torch.jit.trace(
+                #     _model,
+                #     example_kwarg_inputs=sample_inputs_prefill,
+                #     strict=False,
+                #     check_trace=False,
+                # )
+                # trace_model_first = torch.jit.freeze(trace_model_first)
+                # trace_model = None
+                trace_model_first = None
+
                 _model = _set_optimized_model_for_generation(
                     _model, optimized_model=trace_model, 
                     first_token_optimized_model=trace_model_first,
