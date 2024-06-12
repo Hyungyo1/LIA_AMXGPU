@@ -316,13 +316,13 @@ def _greedy_search(
                         model_inputs["encoder_outputs"]["last_hidden_state"],
                     )
                 print("Decoding")
-                outputs = self.trace_graph(**model_inputs)
-                # outputs = self(
-                #     **model_inputs,
-                #     return_dict=True,
-                #     output_attentions=output_attentions,
-                #     output_hidden_states=output_hidden_states,
-                # )
+                # outputs = self.trace_graph(**model_inputs)
+                outputs = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
             else:
                 outputs = self(
                     **model_inputs,

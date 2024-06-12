@@ -1186,14 +1186,14 @@ def model_convert_lowering(
             with torch.no_grad(), torch.cpu.amp.autocast(
                 enabled=True if dtype is torch.bfloat16 else False
             ):
-                trace_model = torch.jit.trace(
-                    _model,
-                    example_kwarg_inputs=sample_inputs,
-                    strict=False,
-                    check_trace=False,
-                )
-                trace_model = torch.jit.freeze(trace_model)
-                
+                # trace_model = torch.jit.trace(
+                #     _model,
+                #     example_kwarg_inputs=sample_inputs,
+                #     strict=False,
+                #     check_trace=False,
+                # )
+                # trace_model = torch.jit.freeze(trace_model)
+                trace_model = None
                 # trace_model_first = torch.jit.trace(
                 #     _model,
                 #     example_kwarg_inputs=sample_inputs_prefill,
