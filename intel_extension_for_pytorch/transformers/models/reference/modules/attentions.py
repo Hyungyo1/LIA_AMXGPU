@@ -319,6 +319,7 @@ def _OPTAttention_forward(
     output_attentions: bool = False,
     gpu_layer: Optional[Tuple[torch.Tensor]] = None,
     policy: Optional[int] = 0,
+    distributed: Optional[bool] = False,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
     """Input shape: Batch x Time x Channel"""
 
@@ -377,26 +378,34 @@ def _OPTAttention_forward(
         # GPU Compute
         else:
             d_model = self.num_heads * self.head_dim
-            hidden_states = hidden_states.view(bsz * tgt_len, 2 * d_model)
-            if policy == 0:
-                w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-                w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+            if distributed:
+                hidden_states = hidden_states.view(bsz * tgt_len, 2 * d_model)
+            else:
+                hidden_states = hidden_states.view(bsz * tgt_len, d_model)
+            if policy == 0 or policy == 2:
+                if distributed:
+                    w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+                    w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+                else:
+                    w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
+                    w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
                 b_k = torch.tensor(gpu_layer[5])
                 b_v = torch.tensor(gpu_layer[7])
             else:
                 w_k = self.k_proj.weight
-                w_v = self.v_proj.weight
                 b_k = self.k_proj.bias
+                w_v = self.v_proj.weight
                 b_v = self.v_proj.bias
 
             # hidden_states = hidden_states.to('cuda')
 
             key = (torch.matmul(hidden_states, w_k.t()) + b_k).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
             value = (torch.matmul(hidden_states, w_v.t()) + b_v).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-            if policy == 3 and tgt_len == 1:
+            if past_key_value is not None:
                 cur_len = past_key_value[0].size(1)
-                key = torch.cat((past_key_value[1][:cur_len].permute(1,0,2,3).to('cuda'), key), dim=1).contiguous()
-                value = torch.cat((past_key_value[2][:cur_len].permute(1,0,2,3).to('cuda'), value), dim=1).contiguous()
+            if tgt_len == 1 and gpu_attn:
+                key = torch.cat([past_key_value[1][:cur_len].permute(1,0,2,3).to('cuda'), key], dim=1).contiguous()
+                value = torch.cat([past_key_value[2][:cur_len].permute(1,0,2,3).to('cuda'), value], dim=1).contiguous()
 
     # AMX Compute
     if gpu_linear is False:
@@ -408,8 +417,11 @@ def _OPTAttention_forward(
 
     # GPU Compute
     else:
-        if policy == 0:
-            w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+        if policy == 0 or policy == 2:
+            if distributed:
+                w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
+            else:
+                w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
             b_q = torch.tensor(gpu_layer[3])
         else:
             w_q = self.q_proj.weight
@@ -442,11 +454,12 @@ def _OPTAttention_forward(
 
     # Attention on GPU
     else:
-        attention_mask = attention_mask.to('cuda')
+        if attention_mask is not None:
+            attention_mask = attention_mask.to('cuda')
         query = query * self.scaling
-        key_buff = key.permute(1,0,2,3).to(torch.bfloat16).to('cpu')
-        value_buff = value.permute(1,0,2,3).to(torch.bfloat16).to('cpu')
-        if policy == 0:
+        key_buff = key.permute(1,0,2,3).to(torch.bfloat16)
+        value_buff = value.permute(1,0,2,3).to(torch.bfloat16)
+        if policy == 0 and tgt_len != 1:
             past_key_value_decoder = None
 
         elif policy == 3 and tgt_len != 1:
@@ -464,7 +477,6 @@ def _OPTAttention_forward(
             )
             past_key_value_decoder[1][:tgt_len].copy_(key_buff)
             past_key_value_decoder[2][:tgt_len].copy_(value_buff)
-
         else:
             past_key_value_decoder = (
                 torch.empty(
@@ -478,8 +490,8 @@ def _OPTAttention_forward(
                 past_key_value[2],
                 past_key_value[3],
             )
-            past_key_value_decoder[1][cur_len-1:cur_len].copy_(key_buff[cur_len-1:cur_len])
-            past_key_value_decoder[2][cur_len-1:cur_len].copy_(value_buff[cur_len-1:cur_len])
+            past_key_value_decoder[1][cur_len:cur_len+1].copy_(key_buff[cur_len:cur_len+1])
+            past_key_value_decoder[2][cur_len:cur_len+1].copy_(value_buff[cur_len:cur_len+1])
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query = query.transpose(1, 2).contiguous().view(*proj_shape)
@@ -488,7 +500,7 @@ def _OPTAttention_forward(
 
         src_len = key.size(1)
         attn_weights = torch.bmm(query, key.transpose(1, 2))
-        if policy == 0:
+        if tgt_len != 1:
             if attention_mask is not None:
                 if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                     raise ValueError(
@@ -498,7 +510,7 @@ def _OPTAttention_forward(
                 attn_weights = torch.max(
                     attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
                 )
-                attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = custom_softmax(attn_weights, dim=-1).to(torch.bfloat16)
 
@@ -536,12 +548,14 @@ def _OPTAttention_forward(
 
     attn_output = attn_output.transpose(1, 2)
 
-    if gpu_linear and not gpu_attn:
-        attn_output.to('cuda')
-
     # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
     # partitioned aross GPUs when using tensor-parallelism.
     attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+    if tgt_len == 1 and gpu_attn:
+        key_buff = key_buff[cur_len:cur_len+1]
+        value_buff = value_buff[cur_len:cur_len+1]
+
     del past_key_value_decoder
     return attn_output, attn_weights_reshaped, past_key_value, key_buff, value_buff
 
@@ -2287,6 +2301,7 @@ class _IPEXAttentionRef(nn.Module):
         is_prefill: Optional[bool] = False,
         gpu_layer: Optional[Tuple[torch.Tensor]] = None,
         policy: Optional[int] = 0,
+        distributed: Optional[bool] = False,
     ):
         if self.model_backbone == "GPTJForCausalLM":
             return _GPTJAttention_forward(
@@ -2331,6 +2346,7 @@ class _IPEXAttentionRef(nn.Module):
                 output_attentions,
                 gpu_layer,
                 policy,
+                distributed,
             )
         elif (
             self.model_backbone == "FalconForCausalLM"
