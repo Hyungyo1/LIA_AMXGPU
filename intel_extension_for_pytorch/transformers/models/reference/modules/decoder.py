@@ -188,7 +188,7 @@ def OPTDecoderLayer_forward(
     #     is_prefill = True
         
     gpu_linear = False
-    if policy in [0, 2, 3]:
+    if policy in [0, 2, 3, 4]:
         gpu_linear = True
 
     residual = hidden_states
@@ -197,7 +197,7 @@ def OPTDecoderLayer_forward(
     if self.do_layer_norm_before:
         # GPU
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, gpu_layer[0], gpu_layer[1])
             else:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, self.self_attn_layer_norm.weight, self.self_attn_layer_norm.bias)
@@ -219,7 +219,7 @@ def OPTDecoderLayer_forward(
 
     if not self.distributed:
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 weight, bias = gpu_mha_linear_load(self, hidden_states, gpu_layer[8], gpu_layer[9])
                 hidden_states = gpu_linear_compute(self, hidden_states, weight, bias)
             else:
@@ -231,7 +231,7 @@ def OPTDecoderLayer_forward(
     else:        
         # GPU Compute
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 weight, bias = gpu_mha_linear_load_ds(self, hidden_states, gpu_layer[8], gpu_layer[9])
                 hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
             else:
@@ -248,7 +248,7 @@ def OPTDecoderLayer_forward(
     if not self.do_layer_norm_before:
         # GPU
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, gpu_layer[0], gpu_layer[1])
             else:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, self.self_attn_layer_norm.weight, self.self_attn_layer_norm.bias)
@@ -264,7 +264,7 @@ def OPTDecoderLayer_forward(
     if self.do_layer_norm_before:
         # GPU
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, gpu_layer[10], gpu_layer[11])
             else:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, self.final_layer_norm.weight, self.final_layer_norm.bias)
@@ -276,7 +276,7 @@ def OPTDecoderLayer_forward(
     # fc1 layer
     if not self.distributed:
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 weight, bias = gpu_fc1_linear_load(self, hidden_states, gpu_layer[12], gpu_layer[13])
                 hidden_states = gpu_linear_relu_compute(self, hidden_states, weight, bias)
             else:
@@ -287,7 +287,7 @@ def OPTDecoderLayer_forward(
     else:
         # GPU Compute
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 weight, bias = gpu_fc1_linear_load_ds(self, hidden_states, gpu_layer[12], gpu_layer[13])
                 hidden_states = gpu_linear_relu_compute(self, hidden_states, weight, bias)
             else:
@@ -300,7 +300,7 @@ def OPTDecoderLayer_forward(
     # fc2 layer
     if not self.distributed:
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 weight, bias = gpu_fc2_linear_load(self, hidden_states, gpu_layer[14], gpu_layer[15])
                 hidden_states = gpu_linear_compute(self, hidden_states, weight, bias)
             else:
@@ -313,7 +313,7 @@ def OPTDecoderLayer_forward(
     else:
         # GPU Compute
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 weight, bias = gpu_fc2_linear_load_ds(self, hidden_states, gpu_layer[14], gpu_layer[15])
                 hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
             else:
@@ -329,7 +329,7 @@ def OPTDecoderLayer_forward(
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
         if gpu_linear:
-            if policy == 0 or policy == 2:
+            if policy != 3:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, gpu_layer[10], gpu_layer[11])
             else:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, self.final_layer_norm.weight, self.final_layer_norm.bias)

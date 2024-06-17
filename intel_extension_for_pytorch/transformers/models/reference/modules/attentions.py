@@ -333,10 +333,10 @@ def _OPTAttention_forward(
     # if tgt_len == 64:
     #     is_prefill = True
     gpu_linear = False
-    if policy in [0, 2, 3]:
+    if policy in [0, 2, 3, 4]:
         gpu_linear = True
     gpu_attn = False
-    if policy in [0, 3]:
+    if policy in [0, 3, 4]:
         gpu_attn = True
 
     if is_cross_attention and past_key_value is not None:
@@ -382,7 +382,7 @@ def _OPTAttention_forward(
                 hidden_states = hidden_states.view(bsz * tgt_len, 2 * d_model)
             else:
                 hidden_states = hidden_states.view(bsz * tgt_len, d_model)
-            if policy == 0 or policy == 2:
+            if policy in [0, 2, 4]:
                 if distributed:
                     w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
                     w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
@@ -417,7 +417,7 @@ def _OPTAttention_forward(
 
     # GPU Compute
     else:
-        if policy == 0 or policy == 2:
+        if policy in [0, 2, 4]:
             if distributed:
                 w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
             else:
@@ -454,8 +454,14 @@ def _OPTAttention_forward(
 
     # Attention on GPU
     else:
-        if attention_mask is not None:
+        if (attention_mask is not None) and (policy != 4):
             attention_mask = attention_mask.to('cuda')
+        elif policy == 4:
+            attention_mask = attention_mask.to('cpu')
+            key = key.to('cpu')
+            value = value.to('cpu')
+            query = query.to('cpu')
+
         query = query * self.scaling
         key_buff = key.permute(1,0,2,3).to(torch.bfloat16)
         value_buff = value.permute(1,0,2,3).to(torch.bfloat16)
