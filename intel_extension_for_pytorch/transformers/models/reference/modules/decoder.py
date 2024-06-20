@@ -223,7 +223,7 @@ def OPTDecoderLayer_forward(
                 weight, bias = gpu_mha_linear_load(self, hidden_states, gpu_layer[8], gpu_layer[9])
                 hidden_states = gpu_linear_compute(self, hidden_states, weight, bias)
             else:
-                hidden_states = gpu_linear_compute_no_delete(self, hidden_states, self.mha_linear_add.weight, self.mha_linear_add.original_bias)
+                hidden_states = gpu_linear_compute_no_delete(self, hidden_states, self.mha_linear_add.weight, self.mha_linear_add.bias)
             hidden_states = residual + hidden_states
         else:    
             hidden_states = self.mha_linear_add(hidden_states, residual)
