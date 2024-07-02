@@ -178,7 +178,7 @@ def OPTDecoderLayer_forward(
     use_cache: Optional[bool] = False,
     past_key_value: Optional[Tuple[torch.Tensor]] = None,
     gpu_layer: Optional[Tuple[torch.Tensor]] = None,
-    policy: Optional[int] = 0,
+    policy: Optional[Tuple[int]] = 0,
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
 
     # is_prefill = False
@@ -187,17 +187,15 @@ def OPTDecoderLayer_forward(
     # if hidden_states.size(1) == 64:
     #     is_prefill = True
         
-    gpu_linear = False
-    if policy in [0, 2, 3, 4]:
-        gpu_linear = True
-
+    # if policy in [0, 2, 3, 4]:
+    #     gpu_linear = True
     residual = hidden_states
     
     # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
     if self.do_layer_norm_before:
         # GPU
-        if gpu_linear:
-            if policy != 3:
+        if policy[0] == 1:
+            if policy[-2] != 1:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, gpu_layer[0], gpu_layer[1])
             else:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, self.self_attn_layer_norm.weight, self.self_attn_layer_norm.bias)
@@ -218,20 +216,24 @@ def OPTDecoderLayer_forward(
     )
 
     if not self.distributed:
-        if gpu_linear:
-            if policy != 3:
+        if policy[3] == 1:
+            residual = residual.to('cuda')
+            if policy[-2] != 1:
                 weight, bias = gpu_mha_linear_load(self, hidden_states, gpu_layer[8], gpu_layer[9])
                 hidden_states = gpu_linear_compute(self, hidden_states, weight, bias)
             else:
                 hidden_states = gpu_linear_compute_no_delete(self, hidden_states, self.mha_linear_add.weight, self.mha_linear_add.bias)
             hidden_states = residual + hidden_states
-        else:    
+        else:
+            hidden_states = hidden_states.to('cpu')
+            residual = residual.to('cpu')    
             hidden_states = self.mha_linear_add(hidden_states, residual)
 
     else:        
         # GPU Compute
-        if gpu_linear:
-            if policy != 3:
+        if policy[3] == 1:
+            residual = residual.to('cuda')
+            if policy[-2] != 1:
                 weight, bias = gpu_mha_linear_load_ds(self, hidden_states, gpu_layer[8], gpu_layer[9])
                 hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
             else:
@@ -239,6 +241,8 @@ def OPTDecoderLayer_forward(
 
         # AMX Compute
         else:
+            hidden_states = hidden_states.to('cpu')
+            residual = residual.to('cpu')
             hidden_states = self.self_attn.out_proj(hidden_states)
 
         # Common
@@ -247,13 +251,14 @@ def OPTDecoderLayer_forward(
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
         # GPU
-        if gpu_linear:
-            if policy != 3:
+        if policy[3] == 1:
+            if policy[-2] != 1:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, gpu_layer[0], gpu_layer[1])
             else:
                 hidden_states = gpu_ln_compute_self_attn(self, hidden_states, self.self_attn_layer_norm.weight, self.self_attn_layer_norm.bias)
         # AMX
         else:
+            hidden_states = hidden_states.to('cpu')
             hidden_states = self.self_attn_layer_norm(hidden_states)        
 
     # Fully Connected
@@ -263,31 +268,33 @@ def OPTDecoderLayer_forward(
     # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
     if self.do_layer_norm_before:
         # GPU
-        if gpu_linear:
-            if policy != 3:
+        if policy[4] == 1:
+            if policy[-2] != 1:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, gpu_layer[10], gpu_layer[11])
             else:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, self.final_layer_norm.weight, self.final_layer_norm.bias)
         
         # AMX
         else:
+            hidden_states = hidden_states.to('cpu')
             hidden_states = self.final_layer_norm(hidden_states)
 
     # fc1 layer
     if not self.distributed:
-        if gpu_linear:
-            if policy != 3:
+        if policy[4] == 1:
+            if policy[-2] != 1:
                 weight, bias = gpu_fc1_linear_load(self, hidden_states, gpu_layer[12], gpu_layer[13])
                 hidden_states = gpu_linear_relu_compute(self, hidden_states, weight, bias)
             else:
                 hidden_states = gpu_linear_relu_compute_no_delete(self, hidden_states, self.linear_relu.linear.weight, self.linear_relu.linear.bias)
         else:
+            hidden_states = hidden_states.to('cpu')
             hidden_states = self.linear_relu(hidden_states)
 
     else:
         # GPU Compute
-        if gpu_linear:
-            if policy != 3:
+        if policy[4] == 1:
+            if policy[-2] != 1:
                 weight, bias = gpu_fc1_linear_load_ds(self, hidden_states, gpu_layer[12], gpu_layer[13])
                 hidden_states = gpu_linear_relu_compute(self, hidden_states, weight, bias)
             else:
@@ -295,25 +302,30 @@ def OPTDecoderLayer_forward(
         
         # AMX Compute
         else:
+            hidden_states = hidden_states.to('cpu')
             hidden_states = self.linear_relu(hidden_states)
 
     # fc2 layer
     if not self.distributed:
-        if gpu_linear:
-            if policy != 3:
+        if policy[5] == 1:
+            residual = residual.to('cuda')
+            if policy[-2] != 1:
                 weight, bias = gpu_fc2_linear_load(self, hidden_states, gpu_layer[14], gpu_layer[15])
                 hidden_states = gpu_linear_compute(self, hidden_states, weight, bias)
             else:
                 hidden_states = gpu_linear_compute_no_delete(self, hidden_states, self.mlp_linear_add.weight, self.mlp_linear_add.bias)
             hidden_states = (residual + hidden_states).view(hidden_states_shape)
         else:
+            hidden_states = hidden_states.to('cpu')
+            residual = residual.to('cpu')
             hidden_states = self.mlp_linear_add(hidden_states, residual).view(
                 hidden_states_shape
             )
     else:
         # GPU Compute
-        if gpu_linear:
-            if policy != 3:
+        if policy[5] == 1:
+            residual = residual.to('cuda')
+            if policy[-2] != 1:
                 weight, bias = gpu_fc2_linear_load_ds(self, hidden_states, gpu_layer[14], gpu_layer[15])
                 hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
             else:
@@ -321,6 +333,8 @@ def OPTDecoderLayer_forward(
 
         # AMX Compute
         else:
+            hidden_states = hidden_states.to('cpu')
+            residual = residual.to('cpu')
             hidden_states = self.fc2(hidden_states)
 
         # Common
@@ -328,8 +342,8 @@ def OPTDecoderLayer_forward(
     
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
-        if gpu_linear:
-            if policy != 3:
+        if policy[5] == 1:
+            if policy[-2] != 1:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, gpu_layer[10], gpu_layer[11])
             else:
                 hidden_states = gpu_ln_compute_final(self, hidden_states, self.final_layer_norm.weight, self.final_layer_norm.bias)
@@ -344,7 +358,7 @@ def OPTDecoderLayer_forward(
     if use_cache:
         outputs += (present_key_value,)
 
-    if policy in [0]:
+    if sum(policy[:6]) != 0:
         outputs += (key,)
         outputs += (value,)
 
@@ -1549,7 +1563,7 @@ class _IPEXDecoderLayerRef(nn.Module):
         vision: Optional[bool] = False,
         is_prefill: Optional[bool] = False,
         gpu_layer: Optional[Tuple[torch.Tensor]] = None,
-        policy: Optional[int] = 0,
+        policy: Optional[Tuple[int]] = 0,
     ):
         if self.model_backbone in ["GPTJForCausalLM", "CodeGenForCausalLM"]:
             return GPTJBlock_forward(
