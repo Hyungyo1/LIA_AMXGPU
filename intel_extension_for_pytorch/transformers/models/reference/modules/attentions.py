@@ -329,9 +329,6 @@ def _OPTAttention_forward(
 
     bsz, tgt_len, _ = hidden_states.size()
 
-    # is_prefill = False
-    # if tgt_len == 64:
-    #     is_prefill = True
     gpu_linear = False
     if policy in [0, 2, 3, 4]:
         gpu_linear = True
@@ -378,17 +375,10 @@ def _OPTAttention_forward(
         # GPU Compute
         else:
             d_model = self.num_heads * self.head_dim
-            if distributed:
-                hidden_states = hidden_states.view(bsz * tgt_len, 2 * d_model)
-            else:
-                hidden_states = hidden_states.view(bsz * tgt_len, d_model)
+            hidden_states = hidden_states.view(bsz * tgt_len, d_model)
             if policy in [0, 2, 4]:
-                if distributed:
-                    w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-                    w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-                else:
-                    w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
-                    w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
+                w_k = (gpu_layer[4].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
+                w_v = (gpu_layer[6].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
                 b_k = torch.tensor(gpu_layer[5])
                 b_v = torch.tensor(gpu_layer[7])
             else:
@@ -418,17 +408,13 @@ def _OPTAttention_forward(
     # GPU Compute
     else:
         if policy in [0, 2, 4]:
-            if distributed:
-                w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, 2 * d_model)
-            else:
-                w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
+            w_q = (gpu_layer[2].permute([0,3,1,2,4])).contiguous().view(d_model, d_model)
             b_q = torch.tensor(gpu_layer[3])
         else:
             w_q = self.q_proj.weight
             b_q = self.q_proj.bias
 
         query = (torch.matmul(hidden_states, w_q.t()) + b_q).view(bsz, tgt_len, self.num_heads, self.head_dim).contiguous()
-        del hidden_states
 
     # Attention on AMX
     if gpu_attn is False:
@@ -455,7 +441,11 @@ def _OPTAttention_forward(
     # Attention on GPU
     else:
         if (attention_mask is not None) and (policy != 4):
-            attention_mask = attention_mask.to('cuda')
+            # attention_mask = attention_mask.to('cuda')
+            attention_mask = torch.triu(torch.ones(tgt_len, key.size(1), device='cuda'), diagonal=1)
+            attention_mask = attention_mask * -3.4028e+38
+            attention_mask = attention_mask.unsqueeze(0).unsqueeze(0)
+            attention_mask = attention_mask.expand(bsz, 1, tgt_len, key.size(1))
         elif policy == 4:
             attention_mask = attention_mask.to('cpu')
             key = key.to('cpu')

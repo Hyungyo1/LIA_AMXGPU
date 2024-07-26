@@ -311,30 +311,12 @@ def OPTDecoderLayer_forward(
                 hidden_states_shape
             )
     else:
-        # GPU Compute
-        if gpu_linear:
-            if policy != 3:
-                weight, bias = gpu_fc2_linear_load_ds(self, hidden_states, gpu_layer[14], gpu_layer[15])
-                hidden_states = gpu_linear_allreduce_compute(self, hidden_states, weight, bias)
-            else:
-                hidden_states = gpu_linear_allreduce_compute_no_delete(self, hidden_states, self.fc2.weight, self.fc2.original_bias)
-
-        # AMX Compute
-        else:
-            hidden_states = self.fc2(hidden_states)
-
-        # Common
+        hidden_states = self.fc2(hidden_states)
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
     
     # 350m applies layer norm AFTER attention
     if not self.do_layer_norm_before:
-        if gpu_linear:
-            if policy != 3:
-                hidden_states = gpu_ln_compute_final(self, hidden_states, gpu_layer[10], gpu_layer[11])
-            else:
-                hidden_states = gpu_ln_compute_final(self, hidden_states, self.final_layer_norm.weight, self.final_layer_norm.bias)
-        else:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
     outputs = (hidden_states,)
 

@@ -13,6 +13,7 @@ from transformers import (
     T5ForConditionalGeneration,
     AutoProcessor,
 )
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from transformers import TextStreamer
 
@@ -153,7 +154,8 @@ if model_type != "llava":
         torch_dtype=amp_dtype,
         config=config,
         low_cpu_mem_usage=True,
-        trust_remote_code=True
+        trust_remote_code=True,
+        device_map='cpu'
     )
     tokenizer = model_class[1].from_pretrained(args.model_id, trust_remote_code=True)
 else:
@@ -304,6 +306,14 @@ if args.benchmark:
                 output = model.generate(pixel_values=input_ids, **generate_kwargs)
             else:
                 input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+                # if i == 0:
+                #     output = model.generate(input_ids, **generate_kwargs)
+                # else:
+                #     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
+                #         with record_function("model_inference"):
+                #             output = model.generate(input_ids, **generate_kwargs)
+                #     print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+                #     exit()
                 output = model.generate(input_ids, **generate_kwargs)
             gen_ids = output[0] if args.token_latency else output
             gen_text = tokenizer.batch_decode(gen_ids[:, input_ids.shape[1]:] if model_type=="llava" else gen_ids, skip_special_tokens=True)
