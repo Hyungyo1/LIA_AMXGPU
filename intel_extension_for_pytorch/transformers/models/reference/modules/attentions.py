@@ -467,12 +467,12 @@ def _OPTAttention_forward(
                     1,
                     dtype=torch.long,
                 ).contiguous(),
-                torch.empty([(tgt_len+32), bsz, self.num_heads, self.head_dim]).contiguous().to(torch.bfloat16),
-                torch.empty([(tgt_len+32), bsz, self.num_heads, self.head_dim]).contiguous().to(torch.bfloat16),
+                torch.empty([(tgt_len+32), bsz, self.num_heads, self.head_dim], dtype=torch.bfloat16, device='cuda').contiguous(),
+                torch.empty([(tgt_len+32), bsz, self.num_heads, self.head_dim], dtype=torch.bfloat16, device='cuda').contiguous(),
                 torch.zeros((tgt_len+32, past_key_value[3].size(1))).contiguous().to(torch.long),
             )
-            past_key_value_decoder[1][:tgt_len].copy_(key_buff)
-            past_key_value_decoder[2][:tgt_len].copy_(value_buff)
+            past_key_value_decoder[1][:tgt_len]=key_buff
+            past_key_value_decoder[2][:tgt_len]=value_buff
         else:
             past_key_value_decoder = (
                 torch.empty(
@@ -508,7 +508,7 @@ def _OPTAttention_forward(
                 )
         attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = custom_softmax(attn_weights, dim=-1).to(torch.bfloat16)
+        attn_weights = torch.softmax(attn_weights, dim=-1, dtype=torch.bfloat16)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
