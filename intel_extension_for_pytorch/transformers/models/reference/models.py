@@ -380,6 +380,14 @@ def OPTForCausalLM_forward(
     output_attentions: Optional[bool] = None,
     output_hidden_states: Optional[bool] = None,
     return_dict: Optional[bool] = False,
+    prefill_policy: Optional[int] = None,
+    decoding_policy: Optional[int] = None,
+    no_overlap: Optional[bool] = None,
+    pin_weight: Optional[bool] = None,
+    gpu_percentage: Optional[int] = None,
+    num_minibatch: Optional[int] = None,
+    enable_cxl: Optional[bool] = None,
+    max_new_tokens: Optional[int] = None,
 ) -> Union[Tuple, CausalLMOutputWithPast]:
     output_attentions = (
         output_attentions
@@ -403,6 +411,14 @@ def OPTForCausalLM_forward(
         output_attentions=output_attentions,
         output_hidden_states=output_hidden_states,
         return_dict=False,
+        prefill_policy=prefill_policy,
+        decoding_policy=decoding_policy,
+        no_overlap=no_overlap,
+        pin_weight=pin_weight,
+        gpu_percentage=gpu_percentage,
+        num_minibatch=num_minibatch,
+        enable_cxl=enable_cxl,
+        max_new_tokens=max_new_tokens,
     )
     hidden_states = outputs[0]
     if (

@@ -192,6 +192,27 @@ def main(args_in: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "--local_rank", required=False, type=int, help="used by dist launchers"
     )
+    parser.add_argument(
+        "--prefill-policy", default=1, type=int, help="prefill policy"
+    )
+    parser.add_argument(
+        "--decoding-policy", default=1, type=int, help="decoding policy"
+    )
+    parser.add_argument(
+        "--no-overlap", action="store_true"
+    )
+    parser.add_argument(
+        "--pin-weight", action="store_true"
+    )
+    parser.add_argument(
+        "--gpu-percentage", default=0, type=int, help="percentage of decoder layers to store on gpu"
+    )
+    parser.add_argument(
+        "--num-minibatch", default=1, type=int, help="number of minibatches to split the batch"
+    )
+    parser.add_argument(
+        "--enable-cxl", action="store_true"
+    )
     args = parser.parse_args(args_in)
 
     parent_path = Path(__file__).parent.absolute()
@@ -243,6 +264,20 @@ def main(args_in: Optional[List[str]] = None) -> None:
                 infer_cmd.extend(["--config-file", str(args.config_file)])
             if args.image_url is not None:
                 infer_cmd.extend(["--image-url", str(args.image_url)])
+            if args.prefill_policy is not None:
+                infer_cmd.extend(["--prefill-policy", str(args.prefill_policy)])
+            if args.decoding_policy is not None:
+                infer_cmd.extend(["--decoding-policy", str(args.decoding_policy)])
+            if args.no_overlap:
+                infer_cmd.extend(["--no-overlap"])
+            if args.pin_weight:
+                infer_cmd.extend(["--pin-weight"])
+            if args.gpu_percentage is not None:
+                infer_cmd.extend(["--gpu-percentage", str(args.gpu_percentage)])
+            if args.num_minibatch is not None:
+                infer_cmd.extend(["--num-minibatch", str(args.num_minibatch)])
+            if args.num_minibatch:
+                infer_cmd.extend(["--enable-cxl"])
 
             print("LLM RUNTIME INFO: running model geneartion...")
             result = subprocess.run(infer_cmd)

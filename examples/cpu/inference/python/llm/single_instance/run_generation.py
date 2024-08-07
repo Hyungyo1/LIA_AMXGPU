@@ -108,6 +108,13 @@ parser.add_argument("--batch-size", default=1, type=int, help="batch size")
 parser.add_argument(
     "--token-latency", action="store_true", help="get token latency breakdown"
 )
+parser.add_argument("--prefill-policy", default=1, type=int, help="prefill policy")
+parser.add_argument("--decoding-policy", default=1, type=int, help="decoding policy")
+parser.add_argument("--no-overlap", action="store_true")
+parser.add_argument("--pin-weight", action="store_true")
+parser.add_argument("--gpu-percentage", default=0, type=int, help="percentage of decoder layers to store on gpu")
+parser.add_argument("--num-minibatch", default=1, type=int, help="number of minibatches to split the batch")
+parser.add_argument("--enable-cxl", action="store_true")
 args = parser.parse_args()
 print(args)
 
@@ -169,7 +176,10 @@ if args.streaming:
     streamer = TextStreamer(tokenizer)
 else:
     streamer = None
-generate_kwargs = dict(do_sample=False, temperature=0.9, num_beams=num_beams, max_new_tokens=args.max_new_tokens, min_new_tokens=args.max_new_tokens, streamer=streamer)
+generate_kwargs = dict(do_sample=False, temperature=0.9, num_beams=num_beams, max_new_tokens=args.max_new_tokens, \
+                min_new_tokens=args.max_new_tokens, streamer=streamer, prefill_policy=args.prefill_policy, \
+                decoding_policy=args.decoding_policy, no_overlap=args.no_overlap, pin_weight=args.pin_weight, \
+                gpu_percentage=args.gpu_percentage, num_minibatch=args.num_minibatch, enable_cxl=args.enable_cxl)
 
 if re.search("gptbigcode", model.config.architectures[0], re.IGNORECASE):
     model_type = "gptbigcode"
@@ -306,14 +316,6 @@ if args.benchmark:
                 output = model.generate(pixel_values=input_ids, **generate_kwargs)
             else:
                 input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-                # if i == 0:
-                #     output = model.generate(input_ids, **generate_kwargs)
-                # else:
-                #     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True) as prof:
-                #         with record_function("model_inference"):
-                #             output = model.generate(input_ids, **generate_kwargs)
-                #     print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
-                #     exit()
                 output = model.generate(input_ids, **generate_kwargs)
             gen_ids = output[0] if args.token_latency else output
             gen_text = tokenizer.batch_decode(gen_ids[:, input_ids.shape[1]:] if model_type=="llava" else gen_ids, skip_special_tokens=True)

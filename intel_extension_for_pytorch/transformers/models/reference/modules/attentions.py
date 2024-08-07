@@ -319,6 +319,7 @@ def _OPTAttention_forward(
     output_attentions: bool = False,
     gpu_layer: Optional[Tuple[torch.Tensor]] = None,
     policy: Optional[int] = 0,
+    max_new_tokens: Optional[int] = None,
     distributed: Optional[bool] = False,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
     """Input shape: Batch x Time x Channel"""
@@ -467,9 +468,9 @@ def _OPTAttention_forward(
                     1,
                     dtype=torch.long,
                 ).contiguous(),
-                torch.empty([(tgt_len+32), bsz, self.num_heads, self.head_dim], dtype=torch.bfloat16, device='cuda').contiguous(),
-                torch.empty([(tgt_len+32), bsz, self.num_heads, self.head_dim], dtype=torch.bfloat16, device='cuda').contiguous(),
-                torch.zeros((tgt_len+32, past_key_value[3].size(1))).contiguous().to(torch.long),
+                torch.empty([(tgt_len+max_new_tokens), bsz, self.num_heads, self.head_dim], dtype=torch.bfloat16, device='cuda').contiguous(),
+                torch.empty([(tgt_len+max_new_tokens), bsz, self.num_heads, self.head_dim], dtype=torch.bfloat16, device='cuda').contiguous(),
+                torch.zeros((tgt_len+max_new_tokens, past_key_value[3].size(1))).contiguous().to(torch.long),
             )
             past_key_value_decoder[1][:tgt_len]=key_buff
             past_key_value_decoder[2][:tgt_len]=value_buff
@@ -2297,6 +2298,7 @@ class _IPEXAttentionRef(nn.Module):
         is_prefill: Optional[bool] = False,
         gpu_layer: Optional[Tuple[torch.Tensor]] = None,
         policy: Optional[int] = 0,
+        max_new_tokens: Optional[int] = None,
         distributed: Optional[bool] = False,
     ):
         if self.model_backbone == "GPTJForCausalLM":
@@ -2342,6 +2344,7 @@ class _IPEXAttentionRef(nn.Module):
                 output_attentions,
                 gpu_layer,
                 policy,
+                max_new_tokens,
                 distributed,
             )
         elif (

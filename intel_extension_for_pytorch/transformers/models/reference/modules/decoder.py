@@ -179,6 +179,7 @@ def OPTDecoderLayer_forward(
     past_key_value: Optional[Tuple[torch.Tensor]] = None,
     gpu_layer: Optional[Tuple[torch.Tensor]] = None,
     policy: Optional[int] = 0,
+    max_new_tokens: Optional[int] = None,
 ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
 
     # is_prefill = False
@@ -214,6 +215,7 @@ def OPTDecoderLayer_forward(
         output_attentions=output_attentions,
         gpu_layer=gpu_layer,
         policy=policy,
+        max_new_tokens=max_new_tokens,
         distributed=self.distributed,
     )
 
@@ -1532,6 +1534,7 @@ class _IPEXDecoderLayerRef(nn.Module):
         is_prefill: Optional[bool] = False,
         gpu_layer: Optional[Tuple[torch.Tensor]] = None,
         policy: Optional[int] = 0,
+        max_new_tokens: Optional[int] = None,
     ):
         if self.model_backbone in ["GPTJForCausalLM", "CodeGenForCausalLM"]:
             return GPTJBlock_forward(
@@ -1565,6 +1568,7 @@ class _IPEXDecoderLayerRef(nn.Module):
                 past_key_value,
                 gpu_layer,
                 policy,
+                max_new_tokens,
             )
         elif (
             self.model_backbone == "FalconForCausalLM"

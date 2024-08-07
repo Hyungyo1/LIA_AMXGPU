@@ -127,6 +127,14 @@ def _greedy_search(
             else None
         )
 
+    prefill_policy = model_kwargs.pop('prefill_policy', None)
+    decoding_policy = model_kwargs.pop('decoding_policy', None)
+    no_overlap = model_kwargs.pop('no_overlap', None)
+    pin_weight = model_kwargs.pop('pin_weight', None)
+    gpu_percentage = model_kwargs.pop('gpu_percentage', None)
+    num_minibatch = model_kwargs.pop('num_minibatch', None)
+    enable_cxl = model_kwargs.pop('enable_cxl', None)
+    max_new_tokens = model_kwargs.pop('max_new_tokens', None)
     # keep track of which sequences are already finished
     unfinished_sequences = torch.ones(
         input_ids.shape[0], dtype=torch.long, device=input_ids.device
@@ -292,12 +300,19 @@ def _greedy_search(
                         model_inputs["encoder_outputs"]["last_hidden_state"],
                     )
                 print("Prefill")
-                # outputs = self.trace_graph_first(**model_inputs)
                 outputs = self(
                     **model_inputs,
                     return_dict=True,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
+                    prefill_policy=prefill_policy,
+                    decoding_policy=decoding_policy,
+                    no_overlap=no_overlap,
+                    pin_weight=pin_weight,
+                    gpu_percentage=gpu_percentage,
+                    num_minibatch=num_minibatch,
+                    enable_cxl=enable_cxl,
+                    max_new_tokens=max_new_tokens,
                 )
 
             elif hasattr(self, "trace_graph") and not first_token: 
@@ -322,6 +337,14 @@ def _greedy_search(
                     return_dict=True,
                     output_attentions=output_attentions,
                     output_hidden_states=output_hidden_states,
+                    prefill_policy=prefill_policy,
+                    decoding_policy=decoding_policy,
+                    no_overlap=no_overlap,
+                    pin_weight=pin_weight,
+                    gpu_percentage=gpu_percentage,
+                    num_minibatch=num_minibatch,
+                    enable_cxl=enable_cxl,
+                    max_new_tokens=max_new_tokens,
                 )
             else:
                 outputs = self(
