@@ -22,3 +22,9 @@ cp lia/cxl/* /home/ubuntu/miniconda3/envs/py310/lib/python3.10/site-packages/tra
 cp lia/generation_utils.py ~/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/generation/utils.py
 cp lia/modeling_opt.py ~/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/models/opt/modeling_opt.py
 ```
+
+# Run Inference
+Example Code:
+```
+OMP_NUM_THREADS=40 numactl -m 1 -C 40-79 python run.py --benchmark -m /home/storage/hyungyo2/opt-model/opt-30b/ --dtype bfloat16 --ipex --input-tokens 32 --max-new-tokens 32 --batch-size 2 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 0 --decoding-policy 1 --gpu-percentage 0 --num-minibatch 2 --gpu-percentage 0 --pin-weight
+```
