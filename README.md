@@ -10,10 +10,10 @@ git submodule sync
 git submodule update --init --recursive
 
 # Build an image with the provided Dockerfile
-DOCKER_BUILDKIT=1 docker build -f examples/cpu/inference/python/llm/Dockerfile --build-arg COMPILE=ON -t ipex-llm:cpu-gpu .
+DOCKER_BUILDKIT=1 docker build -f examples/cpu/inference/python/llm/Dockerfile --build-arg COMPILE=ON -t lia-amxgpu:main .
 
 # Run the container with GPU
-docker run --rm -it --gpus all --privileged ipex-llm:cpu-gpu bash
+docker run --rm -it --gpus all --privileged lia-amxgpu:main bash
 
 # Activate environment variables
 cd llm
