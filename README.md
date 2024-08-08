@@ -18,4 +18,7 @@ docker run --rm -it --gpus all --privileged lia-amxgpu:main bash
 # Activate environment variables
 cd llm
 source ./tools/env_activate.sh
+cp lia/cxl/* /home/ubuntu/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/models/opt/
+cp lia/generation_utils.py ~/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/generation/utils.py
+cp lia/modeling_opt.py ~/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/models/opt/modeling_opt.py
 ```
