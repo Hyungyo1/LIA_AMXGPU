@@ -15,14 +15,14 @@ DOCKER_BUILDKIT=1 docker build -f examples/cpu/inference/python/llm/Dockerfile -
 # Run the container with GPU (please mount a directory to save files onto)
 docker run --rm -it --gpus all -v /$(mount_dir):/home/storage --privileged lia-amxgpu:main bash
 
-# Activate environment variables
+# Activate environment variables (need to do it every time you create a docker container)
 cd llm
 source ./tools/env_activate.sh
 cp lia/generation_utils.py ~/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/generation/utils.py
 cp lia/modeling_opt.py ~/miniconda3/envs/py310/lib/python3.10/site-packages/transformers/models/opt/modeling_opt.py
 ```
 
-# Generating Dummy Model Weights
+# Generating Dummy Model Weights (Just need to do it once, will save the dummy model weights to your mounted directory)
 ```
 bash opt-dummy-weight.sh
 ```
