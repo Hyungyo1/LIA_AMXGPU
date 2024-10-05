@@ -16,14 +16,14 @@ OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m facebook/op
 
 #LIA Online for OPT-175B
 
-OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 32 --max-new-tokens 32 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 57 &> "/home/storage/data/opt175b_32_32_b=1.log"
+OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 32 --max-new-tokens 32 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 24 &> "/home/storage/data/opt175b_32_32_b=1.log"
 
-OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 256 --max-new-tokens 32 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 55 &> "/home/storage/data/opt175b_256_32_b=1.log"
+OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 256 --max-new-tokens 32 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 22 &> "/home/storage/data/opt175b_256_32_b=1.log"
 
-OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 2016 --max-new-tokens 32 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 0 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 53 &> "/home/storage/data/opt175b_2016_32_b=1.log"
+OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 2016 --max-new-tokens 32 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 0 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 21 &> "/home/storage/data/opt175b_2016_32_b=1.log"
 
-OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 32 --max-new-tokens 256 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 55 &> "/home/storage/data/opt175b_32_256_b=1.log"
+OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 32 --max-new-tokens 256 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 24 &> "/home/storage/data/opt175b_32_256_b=1.log"
 
-OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 256 --max-new-tokens 256 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 54 &> "/home/storage/data/opt175b_256_256_b=1.log"
+OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --input-tokens 256 --max-new-tokens 256 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 1 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 22 &> "/home/storage/data/opt175b_256_256_b=1.log"
 
-OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --prompt $TEXT_1792 --max-new-tokens 256 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 0 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 53 &> "/home/storage/data/opt175b_1792_256_b=1.log"
+OMP_NUM_THREADS=56 numactl -m 0 -C 0-55 python run.py --benchmark -m ./opt-175b/ --dtype bfloat16 --ipex --prompt $TEXT_1792 --max-new-tokens 256 --batch-size 1 --token-latency --num-iter 2 --num-warmup 1 --greedy --prefill-policy 0 --decoding-policy 1 --num-minibatch 1 --gpu-percentage 21 &> "/home/storage/data/opt175b_1792_256_b=1.log"
